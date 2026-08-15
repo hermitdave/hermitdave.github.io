@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Orb Collector</title>
+<style>
+*{margin:0;padding:0}body{background:#111;display:flex;justify-content:center;align-items:center;height:100vh}
+canvas{border:2px solid #333}
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<script>
+// === GAME LOOP ARCHITECTURE ===
+// 1. INPUT: Keyboard state tracked via keydown/keyup, read each frame.
+// 2. UPDATE: Advance game state using deltaTime for frame-rate independence.
+//    - Move player based on input keys (clamped to canvas bounds).
+//    - Spawn coins one at a time; check orb-coin proximity for collection.
+//    - Spawn chasers every 25s (max 3); move them toward the player.
+//    - Check orb-chaser collisions → lose life, apply knockback.
+//    - Update particle effects each frame.
+// 3. RENDER: Clear canvas, draw HUD, coins, chasers, player, particles.
+// ============================================================
+
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+let keys = {}, lastTime = 0; // timestamp for delta time calc
+let score = 0, lives = 3, gameOver = false; // game state flags/values
+let player = {x:320,y:240,r:12,speed:180};   // player orb (px/sec speed)
+let coins = [], chasers = [], particles = []; // entity arrays
+let coinTimer = 0, chaserTimer = 0;          // spawn timers
+
+// Input: track pressed keys
+document.addEventListener('keydown', e => { keys[e.key]=true; if(e.key==='r' && gameOver) restart(); });
+document.addEventListener('keyup', e => keys[e.key]=false);
+
+function restart(){ score=0;lives=3;gameOver=false;player.x=320;player.y=240;coins=[];chasers=[];particles=[];coinTimer=0;chaserTimer=0; }
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); } // Euclidean distance helper
+
+// Spawn a single coin at random edge position (padded from walls)
+function spawnCoin(){ coins.push({x:40+Math.random()*(cv.width-80),y:40+Math.random()*(cv.height-80),r:8,pulse:0}); }
+
+// Particle burst: creates N particles radiating outward at random angles/speeds
+function burst(x,y,color,count){ for(let i=0;i<count;i++){ let a=Math.random()*Math.PI*2,s=60+Math.random()*140; particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,color,r:2+Math.random()*3}); } }
+
+// === MAIN GAME LOOP (called via requestAnimationFrame) ===
+function loop(ts){
+  // Calculate delta time in seconds for frame-rate independent movement
+  let dt = Math.min((ts - lastTime)/1000, 0.05); lastTime = ts; // clamp dt to avoid jumps
+
+  // --- UPDATE PHASE ---
+  if(!gameOver){
+    // Player input: normalize diagonal movement so speed is consistent
+    let mx=0,my=0;
+    if(keys['w']||keys['ArrowUp']) my=-1; if(keys['s']||keys['ArrowDown']) my=1;
+    if(keys['a']||keys['ArrowLeft']) mx=-1; if(keys['d']||keys['ArrowRight']) mx=1;
+    let len=Math.hypot(mx,my); if(len>0){ mx/=len; my/=len; }
+    player.x+=mx*player.speed*dt; player.y+=my*player.speed*dt;
+    // Clamp player to canvas bounds
+    player.x=Math.max(player.r,Math.min(cv.width-player.r,player.x));
+    player.y=Math.max(player.r,Math.min(cv.height-player.r,player.y));
+
+    // Coin spawning: ensure exactly one coin exists at a time (up to 10 total collected)
+    if(coins.length<1 && score<10){ spawnCoin(); }
+
+    // Coin collection check
+    for(let i=coins.length-1;i>=0;i--){
+      coins[i].pulse+=dt*4; // pulsing animation timer
+      if(dist(player,coins[i])<player.r+coins[i].r){
+        score++; burst(coins[i].x,coins[i].y,'#FFD700',12); coins.splice(i,1);
+      }
+    }
+
+    // Chaser spawning: every 25 seconds, max 3 on field
+    chaserTimer+=dt;
+    if(chaserTimer>=25 && chasers.length<3){
+      chaserTimer=0;
+      let side=Math.floor(Math.random()*4),sx,sy;
+      // Spawn from random edge of the canvas
+      if(side===0){sx=Math.random()*cv.width;sy=-20;}else if(side===1){sx=cv.width+20;sy=Math.random()*cv.height;}
+      else if(side===2){sx=Math.random()*cv.width;sy=cv.height+20;}else{x:0,sx= -20;sy=Math.random()*cv.height;}
+      // Fix: proper variable assignment above had a bug — correct version below
+      let ex,ey;
+      if(side===0){ex=Math.random()*cv.width;ey=-20;}else if(side===1){ex=cv.width+20;ey=Math.random()*cv.height;}
+      else if(side===2){ex=Math.random()*cv.width;ey=cv.height+20;}else{ex=-20;ey=Math.random()*cv.height;}
+      chasers.push({x:ex,y:ey,r:14,speed:player.speed*0.6});
+    }
+
+    // Move chasers toward player and check collision
+    for(let i=chasers.length-1;i>=0;i--){
+      let c=chasers[i], dx=player.x-c.x, dy=player.y-c.y, d=Math.hypot(dx,dy);
+      if(d>0){ c.x+=dx/d*c.speed*dt; c.y+=dy/d*c.speed*dt; } // normalize & move
+      if(dist(player,c)<player.r+c.r){
+        lives--; burst(player.x,player.y,'#FF4444',15);
+        // Knockback: push player directly away from chaser
+        let kb=100; if(d>0){player.x+=dx/d*kb;player.y+=dy/d*kb;}
+        player.x=Math.max(player.r,Math.min(cv.width-player.r,player.x));
+        player.y=Math.max(player.r,Math.min(cv.height-player.r,player.y));
+        if(lives<=0) gameOver=true;
+      }
+    }
+
+    // Update particles: move and fade
+    for(let i=particles.length-1;i>=0;i--){
+      let p=particles[i]; p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2.5;
+      if(p.life<=0) particles.splice(i,1);
+    }
+  }
+
+  // --- RENDER PHASE ---
+  cx.fillStyle='#111'; cx.fillRect(0,0,cv.width,cv.height); // dark background
+
+  // HUD: score and lives in top-left corner
+  cx.fillStyle='#fff'; cx.font='bold 18px monospace';
+  cx.fillText('Score: '+score,12,24);
+  cx.fillStyle='#FF6666'; cx.fillText('Lives: '.padEnd(lives+7,'♥')+(lives>0?'':'—'),12,48);
+
+  // Draw coins (pulsing gold circles)
+  for(let c of coins){ let r=c.r+Math.sin(c.pulse)*2; cx.fillStyle='#FFD700'; cx.beginPath(); cx.arc(c.x,c.y,r,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,215,0,0.3)'; cx.beginPath(); cx.arc(c.x,c.y,r+4,0,Math.PI*2); cx.fill(); }
+
+  // Draw chasers (red glowing orbs)
+  for(let c of chasers){ cx.fillStyle='#FF2222'; cx.beginPath(); cx.arc(c.x,c.y,c.r,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,34,34,0.25)'; cx.beginPath(); cx.arc(c.x,c.y,c.r+6,0,Math.PI*2); cx.fill(); }
+
+  // Draw player orb (glowing cyan/white)
+  let grd=cx.createRadialGradient(player.x,player.y,0,player.x,player.y,player.r+10);
+  grd.addColorStop(0,'#fff'); grd.addColorStop(0.5,'#4DF'); grd.addColorStop(1,'rgba(68,221,255,0)');
+  cx.fillStyle=grd; cx.beginPath(); cx.arc(player.x,player.y,player.r+10,0,Math.PI*2); cx.fill();
+
+  // Draw particles (fading colored dots)
+  for(let p of particles){ cx.globalAlpha=Math.max(0,p.life); cx.fillStyle=p.color; cx.beginPath(); cx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2); cx.fill(); }
+  cx.globalAlpha=1; // restore alpha
+
+  // Game over overlay
+  if(gameOver){
+    cx.fillStyle='rgba(0,0,0,0.7)'; cx.fillRect(0,0,cv.width,cv.height);
+    cx.fillStyle='#FF4444'; cx.font='bold 36px monospace'; cx.textAlign='center';
+    cx.fillText('GAME OVER',cv.width/2,cv.height/2-20);
+    cx.fillStyle='#fff'; cx.font='22px monospace';
+    cx.fillText('Score: '+score,cv.width/2,cv.height/2+15);
+    cx.fillStyle='#aaa'; cx.font='16px monospace';
+    cx.fillText('Press R to restart',cv.width/2,cv.height/2+45); cx.textAlign='left';
+  }
+
+  requestAnimationFrame(loop); // schedule next frame
+}
+requestAnimationFrame(loop); // start the loop
+</script>
+</body<!--
+  MODEL=qwen3.6:27b-mlx
+  THINK=True
+  REASONING_EFFORT=medium
+  GENERATED=2026-08-15 18:40:50
+  eval_count=2610
+  -->
+>
+</html>

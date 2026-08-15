@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Orb Collector</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a14;display:flex;align-items:center;justify-content:center}
+  canvas{border:1px solid #333}
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<script>
+/* ORB COLLECTOR
+ * Game loop (requestAnimationFrame driven, ~60fps):
+ *   1. UPDATE  - advance all state using deltaTime so motion is frame-rate
+ *                independent (speeds are pixels/second, multiplied by dt).
+ *   2. RENDER  - clear the canvas and draw coins, chasers, particles, the
+ *                glowing orb, HUD and any game-over text from current state.
+ *   3. INPUT   - key state is sampled via keydown/keyup listeners and polled
+ *                inside update(); 'R' restarts the game after game over.
+ * Each frame calls update(dt) then render(); input is polled within update.
+ */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = 640, H = 480, TAU = Math.PI * 2;
+
+let player, coins, chasers, particles, score, lives, spawnTimer, over, last;
+
+function reset(){
+  player = {x:W/2, y:H/2, r:10, spd:220};
+  coins = []; chasers = []; particles = [];
+  score = 0; lives = 3; spawnTimer = 0; over = false;
+  spawnCoin(); // keep exactly one coin on screen at a time
+}
+
+function spawnCoin(){
+  const r = 8;
+  coins.push({x:Math.random()*(W-2*r)+r, y:Math.random()*(H-2*r)+r, r});
+}
+
+function burst(x,y){
+  for(let i=0;i<14;i++){
+    const a=Math.random()*TAU, s=Math.random()*120+40;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.6});
+  }
+}
+
+// --- input ---
+const keys = {};
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if(over && k === 'r') reset();
+});
+addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+function update(dt){
+  if(over) return;
+
+  // player movement (WASD + arrows, diagonal normalized)
+  let dx=0, dy=0;
+  if(keys['a']||keys['arrowleft']) dx-=1;
+  if(keys['d']||keys['arrowright']) dx+=1;
+  if(keys['w']||keys['arrowup']) dy-=1;
+  if(keys['s']||keys['arrowdown']) dy+=1;
+  if(dx||dy){
+    const l=Math.hypot(dx,dy);
+    player.x += dx/l*player.spd*dt;
+    player.y += dy/l*player.spd*dt;
+  }
+  player.x = Math.max(player.r, Math.min(W-player.r, player.x));
+  player.y = Math.max(player.r, Math.min(H-player.r, player.y));
+
+  // coin collection
+  for(const c of coins){
+    if(Math.hypot(c.x-player.x, c.y-player.y) < c.r+player.r){
+      score++; burst(c.x, c.y);
+      coins = []; spawnCoin();
+      break;
+    }
+  }
+
+  // chasers: one every 25s, up to 3 max
+  spawnTimer += dt;
+  if(spawnTimer >= 25 && chasers.length < 3){
+    spawnTimer = 0;
+    chasers.push({x:Math.random()*W, y:Math.random()*H, r:12});
+  }
+  const cs = player.spd * 0.6; // chaser speed = 60% of player speed
+  for(const ch of chasers){
+    const a = Math.atan2(player.y-ch.y, player.x-ch.x);
+    ch.x += Math.cos(a)*cs*dt;
+    ch.y += Math.sin(a)*cs*dt;
+    if(Math.hypot(ch.x-player.x, ch.y-player.y) < ch.r+player.r){
+      lives--;
+      const k = Math.atan2(player.y-ch.y, player.x-ch.x); // knock away
+      player.x = Math.max(player.r, Math.min(W-player.r, player.x+Math.cos(k)*70));
+      player.y = Math.max(player.r, Math.min(H-player.r, player.y+Math.sin(k)*70));
+      if(lives <= 0) over = true;
+    }
+  }
+
+  // particles
+  for(const p of particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function render(){
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+
+  for(const c of coins){
+    ctx.fillStyle = '#ffd451';
+    ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,TAU); ctx.fill();
+  }
+
+  for(const ch of chasers){
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath(); ctx.arc(ch.x,ch.y,ch.r,0,TAU); ctx.fill();
+  }
+
+  for(const p of particles){
+    ctx.globalAlpha = Math.max(0, p.life/0.6);
+    ctx.fillStyle = '#ffd451';
+    ctx.fillRect(p.x-2, p.y-2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+
+  // glowing player orb
+  const g = ctx.createRadialGradient(player.x,player.y,2,player.x,player.y,player.r*3);
+  g.addColorStop(0,'rgba(80,220,255,1)');
+  g.addColorStop(1,'rgba(80,220,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(player.x,player.y,player.r*3,0,TAU); ctx.fill();
+  ctx.fillStyle = '#e8fbff';
+  ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,TAU); ctx.fill();
+
+  // HUD
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px monospace';
+  ctx.fillText('Score: '+score, 12, 24);
+  ctx.fillText('Lives: '+lives, 12, 44);
+
+  if(over){
+    ctx.font = '20px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER - Score: '+score+' - Press R to restart', W/2, H/2);
+    ctx.textAlign = 'left';
+  }
+}
+
+function loop(t){
+  const dt = last ? Math.min((t-last)/1000, 0.05) : 0; // clamp for stability
+  last = t;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+reset();
+requestAnimationFrame(loop);
+</script>
+<!--
+  MODEL=qwen3.8:27b-mlx
+  REASONING_EFFORT=medium
+  THINK=true
+  GENERATED=2026-08-15 15:22:58
+  eval_count=3942
+  -->
+<div id="comp-badge" style="position:fixed;bottom:6px;right:6px;z-index:99;font:11px monospace;color:#fff;background:#333;padding:4px 8px;border-radius:4px;">qwen3.8:27b-mlx &middot; reasoning_effort=medium &middot; think=on</div>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Orb Collector</title>
+<style>body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#111}</style>
+</head>
+<body>
+<!-- GAME LOOP: Each frame we (1) gather keyboard input, (2) update all entities with deltaTime for frame-rate independent movement, (3) render everything via canvas primitives. requestAnimationFrame drives the cycle. -->
+<canvas id="c" width="640" height="480"></canvas>
+<script>
+const ctx=c.getContext('2d'),W=640,H=480;
+// Game state: player orb, coins, chasers, particles, score, lives, game-over flag, spawn timers.
+let P={x:320,y:240,r:12,speed:200},coins=[],chases=[],parts=[];
+let score=0,lives=3,gameOver=false,lastChase=0,keys={};
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(gameOver&&e.key==='r')restart()});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+function restart(){score=lives=0;gameOver=false;P.x=320;P.y=240;coins=[];chases=[];parts=[];lastChase=0}
+
+// Particles: tiny circles that fade out over 1 second, used for coin-collection bursts.
+function burst(x,y){for(let i=0;i<12;i++){let a=Math.random()*Math.PI*2,s=50+Math.random()*90;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1})}}
+
+let lastT=performance.now();
+function loop(ts){
+  let dt=Math.min((ts-lastT)/1000,.05);lastT=ts;// deltaTime, capped at 50ms to prevent tunneling on tab-switch.
+
+  // === UPDATE PHASE ===
+  if(!gameOver){
+    // Player movement: build direction vector from WASD/arrows, normalize, scale by speed*dt.
+    let dx=0,dy=0;
+    if(keys['ArrowLeft']||keys['a'])dx--;if(keys['ArrowRight']||keys['d'])dx++;
+    if(keys['ArrowUp']||keys['w'])dy--;if(keys['ArrowDown']||keys['s'])dy++;
+    let len=Math.hypot(dx,dy);if(len){dx/=len;dy/=len}
+    P.x+=dx*P.speed*dt;P.y+=dy*P.speed*dt;
+    P.x=Math.max(P.r,Math.min(W-P.r,P.x));P.y=Math.max(P.r,Math.min(H-P.r,P.y));
+
+    // Spawn one gold coin at a time (up to 10 total collected).
+    if(!coins.length&&score<10)coins.push({x:30+Math.random()*(W-60),y:30+Math.random()*(H-60)});
+
+    // Coin collection: circle-circle distance check, trigger particle burst.
+    for(let i=coins.length-1;i>=0;i--){
+      if(Math.hypot(coins[i].x-P.x,coins[i].y-P.y)<P.r+10){burst(coins[i].x,coins[i].y);score++;coins.splice(i,1)}}
+
+    // Spawn red chasers every 25 seconds (max 3 simultaneous).
+    lastChase+=dt;if(lastChase>=25&&chases.length<3){let cx,cy;do{cx=Math.random()*W;cy=Math.random()*H}while(Math.hypot(cx-P.x,cy-P.y)<120);chases.push({x:cx,y:cy});lastChase=0}
+
+    // Chasers pursue player at 60% of player speed.
+    for(let c of chases){let dx=P.x-c.x,dy=P.y-c.y,l=Math.hypot(dx,dy);if(l>1){c.x+=dx/l*P.speed*.6*dt;c.y+=dy/l*P.speed*.6*dt}}
+
+    // Chaser collision: lose a life, knock player away from the chaser.
+    for(let i=chases.length-1;i>=0;i--){
+      if(Math.hypot(chases[i].x-P.x,chases[i].y-P.y)<P.r+12){lives--;score=Math.max(0,score-2);
+        let dx=P.x-chases[i].x,dy=P.y-chases[i].y,l=Math.hypot(dx,dy)||1;
+        P.x+=dx/l*60;P.y+=dy/l*60;P.x=Math.max(P.r,Math.min(W-P.r,P.x));P.y=Math.max(P.r,Math.min(H-P.r,P.y));
+        if(lives<=0)gameOver=true}}
+
+    // Update particles: move by velocity, fade out.
+    for(let i=parts.length-1;i>=0;i--){let p=parts[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2;if(p.life<=0)parts.splice(i,1)}
+  }
+
+  // === RENDER PHASE ===// Draw dark background.
+  ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
+
+  // Draw gold coins (circles with glow).
+  for(let c of coins){ctx.beginPath();ctx.arc(c.x,c.y,10,0,Math.PI*2);ctx.fillStyle='#ffd700';ctx.shadowBlur=10;ctx.shadowColor='#ffd700';ctx.fill()}
+
+  // Draw red chasers.
+  ctx.shadowBlur=8;ctx.shadowColor='#ff4444';for(let c of chases){ctx.beginPath();ctx.arc(c.x,c.y,12,0,Math.PI*2);ctx.fillStyle='#ff4444';ctx.fill()}
+
+  // Draw player (cyan glowing orb).
+  ctx.beginPath();ctx.arc(P.x,P.y,P.r,0,Math.PI*2);ctx.fillStyle='#00e5ff';ctx.shadowBlur=18;ctx.shadowColor='#00e5ff';ctx.fill();ctx.shadowBlur=0;
+
+  // Draw fading particles.
+  for(let p of parts){ctx.globalAlpha=p.life;ctx.beginPath();ctx.arc(p.x,p.y,3*p.life,0,Math.PI*2);ctx.fillStyle='#ffd700';ctx.fill()}
+  ctx.globalAlpha=1;
+
+  // HUD: top-left score and lives.
+  ctx.font='bold 18px monospace';ctx.fillStyle='#fff';ctx.fillText('Score: '+score,10,25);ctx.fillText('Lives: '+lives,10,48);
+
+  // Game-over overlay.
+  if(gameOver){ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(0,0,W,H);ctx.font='bold 36px monospace';ctx.fillStyle='#ff4444';ctx.textAlign='center';ctx.fillText('GAME OVER',W/2,H/2-20);ctx.font='20px monospace';ctx.fillStyle='#fff';ctx.fillText('Score: '+score,W/2,H/2+15);ctx.fillText('Press R to restart',W/2,H/2+45);ctx.textAlign='left'}
+
+  requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+<!--
+  MODEL=qwen3.6:27b-mlx
+  REASONING_EFFORT=low
+  THINK=true
+  GENERATED=2026-08-15 15:04:34
+  eval_count=3742
+  -->
+<div id="comp-badge" style="position:fixed;bottom:6px;right:6px;z-index:99;font:11px monospace;color:#fff;background:#333;padding:4px 8px;border-radius:4px;">qwen3.6:27b-mlx &middot; reasoning_effort=low &middot; think=on</div>
+</body>
+</html>

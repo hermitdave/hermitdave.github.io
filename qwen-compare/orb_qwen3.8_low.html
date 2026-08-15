@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orb Collector</title>
+<style>
+  html,body{margin:0;height:100%;background:#05060a;display:flex;align-items:center;justify-content:center}
+  canvas{background:#0a0a14;border:1px solid #223;border-radius:8px}
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<script>
+/*
+  ORB COLLECTOR - single file, no dependencies.
+  The program runs on requestAnimationFrame. Every frame it runs three phases:
+    1. INPUT  : held keys are stored in a map (via event listeners) and read here
+                to build the player's movement direction vector.
+    2. UPDATE : every entity advances by dt (deltaTime in seconds) so motion is
+                frame-rate independent; collisions, spawning, particles, lives and
+                the game-over transition are resolved here.
+    3. RENDER : the canvas is cleared and every entity plus the HUD/game-over
+                overlay is drawn with canvas primitives (arc, rect, gradients).
+  Phase order is always INPUT -> UPDATE -> RENDER, repeated ~60fps or faster.
+*/
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = c.width, H = c.height;
+
+// --- small helpers
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const dist  = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+
+// --- mutable game state (re-initialised by reset)
+let player, coin, chasers, particles, score, lives, spawnTimer, invuln, state, last;
+
+function reset(){
+  player = {x:W/2, y:H/2, r:12, speed:190};
+  coin = null; chasers = []; particles = [];
+  score = 0; lives = 3; spawnTimer = 25; invuln = 0; state = 'play';
+  spawnCoin();
+}
+
+// --- input: record key state; 'r' restarts after game over
+const keys = {};
+addEventListener('keydown', e=>{
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if(['arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+  if(k==='r' && state==='over') reset();
+});
+addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+// --- spawners / effect factory
+function spawnCoin(){ coin = {x:20+Math.random()*(W-40), y:20+Math.random()*(H-40), r:9}; }
+function spawnChaser(){
+  // drop a chaser in from a random corner of the arena
+  const e = Math.floor(Math.random()*4);
+  const p = e===0?{x:0,y:0}:e===1?{x:W,y:0}:e===2?{x:W,y:H}:{x:0,y:H};
+  chasers.push({x:p.x, y:p.y, r:11});
+}
+function burst(x,y){
+  for(let i=0;i<16;i++){
+    const a=Math.random()*6.283, s=40+Math.random()*120;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.6});
+  }
+}
+
+const chaserSpeed = 190*0.6; // chasers move at 60% of the player's speed
+
+// --- INPUT + UPDATE phase
+function update(dt){
+  if(state!=='play') return;
+
+  // build a normalised movement vector from WASD / arrow keys
+  let dx=0, dy=0;
+  if(keys['a']||keys['arrowleft'])  dx-=1;
+  if(keys['d']||keys['arrowright']) dx+=1;
+  if(keys['w']||keys['arrowup'])    dy-=1;
+  if(keys['s']||keys['arrowdown'])  dy+=1;
+  const len=Math.hypot(dx,dy);
+  if(len>0){
+    player.x = clamp(player.x + dx/len*player.speed*dt, player.r, W-player.r);
+    player.y = clamp(player.y + dy/len*player.speed*dt, player.r, H-player.r);
+  }
+
+  // coin collected: raise score, play a particle burst, spawn the next coin
+  if(dist(player,coin) < player.r+coin.r){
+    score++; burst(coin.x,coin.y); spawnCoin();
+  }
+
+  // a new chaser every 25 seconds, capped at 3
+  spawnTimer -= dt;
+  if(spawnTimer<=0 && chasers.length<3){ spawnChaser(); spawnTimer=25; }
+
+  // chasers steer toward the player
+  for(const ch of chasers){
+    const a=Math.atan2(player.y-ch.y, player.x-ch.x);
+    ch.x += Math.cos(a)*chaserSpeed*dt;
+    ch.y += Math.sin(a)*chaserSpeed*dt;
+  }
+
+  // chaser contact costs a life and knocks the orb away (brief invulnerability)
+  if(invuln>0) invuln -= dt;
+  for(const ch of chasers){
+    if(invuln<=0 && dist(player,ch) < player.r+ch.r){
+      lives--; invuln=1.5;
+      const a=Math.atan2(player.y-ch.y, player.x-ch.x);
+      player.x = clamp(player.x+Math.cos(a)*80, player.r, W-player.r);
+      player.y = clamp(player.y+Math.sin(a)*80, player.r, H-player.r);
+      if(lives<=0) state='over';
+    }
+  }
+
+  // advance + cull particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
+    if(p.life<=0) particles.splice(i,1);
+  }
+}
+
+// --- RENDER phase
+function render(){
+  ctx.fillStyle='#0a0a14';
+  ctx.fillRect(0,0,W,H);
+
+  // gold coin
+  const cg=ctx.createRadialGradient(coin.x,coin.y,1,coin.x,coin.y,coin.r);
+  cg.addColorStop(0,'#fff5b0'); cg.addColorStop(1,'#e0a000');
+  ctx.fillStyle=cg;
+  ctx.beginPath(); ctx.arc(coin.x,coin.y,coin.r,0,6.283); ctx.fill();
+
+  // particle burst
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,p.life/0.6);
+    ctx.fillStyle='#ffd23f';
+    ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,6.283); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // red chasers
+  for(const ch of chasers){
+    ctx.save();
+    ctx.shadowBlur=15; ctx.shadowColor='#ff2b2b'; ctx.fillStyle='#ff3b3b';
+    ctx.beginPath(); ctx.arc(ch.x,ch.y,ch.r,0,6.283); ctx.fill();
+    ctx.restore();
+  }
+
+  // player orb (blinks while invulnerable after a hit)
+  if(!(invuln>0 && Math.floor(invuln*10)%2)){
+    ctx.save();
+    ctx.shadowBlur=20; ctx.shadowColor='#3ad1ff';
+    const pg=ctx.createRadialGradient(player.x,player.y,1,player.x,player.y,player.r);
+    pg.addColorStop(0,'#ffffff'); pg.addColorStop(1,'#2ea8ff');
+    ctx.fillStyle=pg;
+    ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,6.283); ctx.fill();
+    ctx.restore();
+  }
+
+  // HUD (top-left)
+  ctx.fillStyle='#fff';
+  ctx.font='16px monospace';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('Score: '+score, 10, 10);
+  ctx.fillText('Lives: '+'\u25CF'.repeat(Math.max(0,lives)), 10, 32);
+
+  // game over overlay
+  if(state==='over'){
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ff5555';
+    ctx.font='28px monospace';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER - Score: '+score+' - Press R to restart', W/2, H/2);
+    ctx.textAlign='left';
+  }
+}
+
+// --- main loop: compute dt, run update then render, request next frame
+function loop(now){
+  let dt=(now-last)/1000; last=now;
+  if(dt>0.05) dt=0.05; // clamp large gaps (e.g. tab switch) to avoid jumps
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+reset();
+last = performance.now();
+requestAnimationFrame(loop);
+</script>
+<!--
+  MODEL=qwen3.8:27b-mlx
+  REASONING_EFFORT=low
+  THINK=true
+  GENERATED=2026-08-15 15:21:03
+  eval_count=8010
+  -->
+<div id="comp-badge" style="position:fixed;bottom:6px;right:6px;z-index:99;font:11px monospace;color:#fff;background:#333;padding:4px 8px;border-radius:4px;">qwen3.8:27b-mlx &middot; reasoning_effort=low &middot; think=on</div>
+</body>
+</html>

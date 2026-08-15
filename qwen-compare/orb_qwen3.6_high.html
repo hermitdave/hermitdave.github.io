@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Orb Collector</title>
+<style>
+body{background:#111;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+canvas{border:2px solid #333;border-radius:4px}
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<script>
+// GAME LOOP: INPUT (read keys on events) -> UPDATE (move player, coins, chasers, particles using deltaTime) -> RENDER (clear canvas, draw all entities, HUD, game-over screen). requestAnimationFrame drives the cycle.
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+let score=0,lives=3,gameOver=false,lastTime=0,chaserTimer=0;
+const keys={};
+document.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='r'&&gameOver)restart()});
+document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+function restart(){score=0;lives=3;gameOver=false;chaserTimer=0;coins.length=0;chasers.length=0;particles.length=0;spawnCoin()}
+const player={x:320,y:240,r:12,speed:200};
+let coins=[],chasers=[],particles=[];
+function spawnCoin(){if(coins.length<1)coins.push({x:30+Math.random()*580,y:30+Math.random()*420,r:8})}
+function burst(x,y,color){for(let i=0;i<12;i++)particles.push({x,y,vx:(Math.random()-.5)*200,vy:(Math.random()-.5)*200,life:.6,color})}
+function update(dt){
+if(gameOver)return;
+let dx=0,dy=0;
+if(keys['a']||keys['arrowleft'])dx-=1;if(keys['d']||keys['arrowright'])dx+=1;
+if(keys['w']||keys['arrowup'])dy-=1;if(keys['s']||keys['arrowdown'])dy+=1;
+if(dx&&dy){dx*=.707;dy*=.707}
+player.x+=dx*player.speed*dt;player.y+=dy*player.speed*dt;
+player.x=Math.max(player.r,Math.min(c.width-player.r,player.x));
+player.y=Math.max(player.r,Math.min(c.height-player.r,player.y));
+for(let i=coins.length-1;i>=0;i--){let d=Math.hypot(player.x-coins[i].x,player.y-coins[i].y);if(d<player.r+coins[i].r){score++;burst(coins[i].x,coins[i].y,'#ffd700');coins.splice(i,1);spawnCoin()}}
+chaserTimer+=dt;
+if(chaserTimer>=25&&chasers.length<3){chaserTimer=0;let sx=Math.random()<.5?20:c.width-20;chasers.push({x:sx,y:Math.random()*c.height})}
+for(let ch of chasers){let dx2=player.x-ch.x,dy2=player.y-ch.y,d2=Math.hypot(dx2,dy2)||1;ch.x+=dx2/d2*player.speed*.6*dt;ch.y+=dy2/d2*player.speed*.6*dt}
+for(let i=chasers.length-1;i>=0;i--){let d=Math.hypot(player.x-chasers[i].x,player.y-chasers[i].y);if(d<player.r+10){lives--;burst(player.x,player.y,'#ff4444');let kx=player.x-chasers[i].x,ky=player.y-chasers[i].y,kd=Math.hypot(kx,ky)||1;player.x+=kx/kd*80;player.y+=ky/kd*80;player.x=Math.max(player.r,Math.min(c.width-player.r,player.x));player.y=Math.max(player.r,Math.min(c.height-player.r,player.y));if(lives<=0)gameOver=true}}
+for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;if(p.life<=0)particles.splice(i,1)}
+}
+function render(){
+ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,c.width,c.height);
+for(let co of coins){ctx.beginPath();ctx.arc(co.x,co.y,co.r,0,Math.PI*2);ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0}
+for(let ch of chasers){ctx.beginPath();ctx.arc(ch.x,ch.y,10,0,Math.PI*2);ctx.fillStyle='#ff3333';ctx.shadowColor='#ff0000';ctx.shadowBlur=15;ctx.fill();ctx.shadowBlur=0}
+for(let p of particles){ctx.globalAlpha=Math.max(0,p.life/.6);ctx.fillStyle=p.color;ctx.fillRect(p.x-2,p.y-2,4,4)}
+ctx.globalAlpha=1;
+ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,Math.PI*2);ctx.fillStyle='#4fc3f7';ctx.shadowColor='#4fc3f7';ctx.shadowBlur=20;ctx.fill();ctx.shadowBlur=0;
+ctx.fillStyle='#fff';ctx.font='16px monospace';ctx.textAlign='left';ctx.fillText('Score: '+score,10,25);ctx.fillText('Lives: '+lives,10,45);
+if(gameOver){ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,c.width,c.height);ctx.textAlign='center';ctx.fillStyle='#ff4444';ctx.font='bold 32px monospace';ctx.fillText('GAME OVER',c.width/2,c.height/2-25);ctx.fillStyle='#fff';ctx.font='20px monospace';ctx.fillText('Score: '+score,c.width/2,c.height/2+10);ctx.font='16px monospace';ctx.fillText('Press R to restart',c.width/2,c.height/2+40)}
+}
+function loop(t){let dt=lastTime?Math.min((t-lastTime)/1000,.1):0;lastTime=t;update(dt);render();requestAnimationFrame(loop)}
+spawnCoin();requestAnimationFrame(loop);
+</script>
+</body<!--
+  MODEL=qwen3.6:27b-mlx
+  THINK=True
+  REASONING_EFFORT=high
+  GENERATED=2026-08-15 18:44:03
+  eval_count=3766
+  -->
+>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Orb Collector</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a12;display:flex;align-items:center;justify-content:center;}
+  canvas{background:#000;border:1px solid #333;}
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<script>
+// ============================================================
+// ORB COLLECTOR - single-file game, no external libraries.
+// GAME LOOP: every animation frame we (1) UPDATE the world using
+// deltaTime so motion is frame-rate independent, then (2) RENDER
+// the world with canvas primitives. INPUT is read continuously
+// from the `keys` map inside update(), so movement stays smooth.
+// Per-frame order: update -> render (input persists via keydown/keyup).
+// ============================================================
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = 640, H = 480;
+const keys = {};                       // live key-press state
+let player, chasers, coin, particles, score, lives, over, chaserTimer, last;
+
+function reset(){
+  player = {x:W/2, y:H/2, r:12, speed:200};
+  chasers = [];
+  particles = [];
+  score = 0; lives = 3; over = false;
+  chaserTimer = 0;
+  coin = newCoin();
+}
+function newCoin(){ return {x:20+Math.random()*(W-40), y:20+Math.random()*(H-40), r:8}; }
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function burst(x,y,color){
+  for(let i=0;i<14;i++){
+    const a=Math.random()*6.28, s=60+Math.random()*120;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.6,color});
+  }
+}
+
+function update(dt){
+  if(over) return;
+  // input-driven, frame-rate independent movement
+  let dx=0, dy=0;
+  if(keys['a']||keys['arrowleft']) dx-=1;
+  if(keys['d']||keys['arrowright']) dx+=1;
+  if(keys['w']||keys['arrowup']) dy-=1;
+  if(keys['s']||keys['arrowdown']) dy+=1;
+  if(dx||dy){ const m=Math.hypot(dx,dy); player.x+=dx/m*player.speed*dt; player.y+=dy/m*player.speed*dt; }
+  player.x=Math.max(player.r,Math.min(W-player.r,player.x));
+  player.y=Math.max(player.r,Math.min(H-player.r,player.y));
+
+  // coin collection + particle burst
+  if(dist(player,coin)<player.r+coin.r){ score++; burst(coin.x,coin.y,'#ffd24a'); coin=newCoin(); }
+
+  // spawn a chaser every 25s, max 3, moving at 60% of player speed
+  chaserTimer+=dt;
+  if(chaserTimer>=25 && chasers.length<3){
+    chaserTimer=0;
+    chasers.push({x:Math.random()<.5?0:W, y:Math.random()*H, r:12, speed:player.speed*0.6});
+  }
+  for(const c of chasers){
+    const a=Math.atan2(player.y-c.y, player.x-c.x);
+    c.x+=Math.cos(a)*c.speed*dt; c.y+=Math.sin(a)*c.speed*dt;
+    if(dist(player,c)<player.r+c.r){
+      lives--;
+      const k=Math.atan2(player.y-c.y, player.x-c.x);   // knock orb away
+      player.x=Math.max(player.r,Math.min(W-player.r,player.x+Math.cos(k)*60));
+      player.y=Math.max(player.r,Math.min(H-player.r,player.y+Math.sin(k)*60));
+      burst(player.x,player.y,'#ff5a5a');
+      if(lives<=0) over=true;
+    }
+  }
+
+  // advance + cull particles
+  for(const p of particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; }
+  particles=particles.filter(p=>p.life>0);
+}
+
+function render(){
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  // particles
+  for(const p of particles){ ctx.globalAlpha=Math.max(0,p.life/0.6); ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,3,0,6.28); ctx.fill(); }
+  ctx.globalAlpha=1;
+  // coin
+  ctx.fillStyle='#ffd24a'; ctx.beginPath(); ctx.arc(coin.x,coin.y,coin.r,0,6.28); ctx.fill();
+  // chasers
+  ctx.fillStyle='#ff3030'; for(const c of chasers){ ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,6.28); ctx.fill(); }
+  // glowing player orb
+  const g=ctx.createRadialGradient(player.x,player.y,0,player.x,player.y,player.r*2.2);
+  g.addColorStop(0,'#7ff'); g.addColorStop(1,'rgba(0,255,200,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(player.x,player.y,player.r*2.2,0,6.28); ctx.fill();
+  ctx.fillStyle='#eaffff'; ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,6.28); ctx.fill();
+  // HUD (top-left)
+  ctx.fillStyle='#fff'; ctx.font='16px monospace'; ctx.textAlign='left';
+  ctx.fillText('Score: '+score, 12, 24);
+  ctx.fillText('Lives: '+lives, 12, 44);
+  // game over overlay
+  if(over){
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ff5a5a'; ctx.font='22px monospace'; ctx.textAlign='center';
+    ctx.fillText('GAME OVER - Score: '+score+' - Press R to restart', W/2, H/2);
+    ctx.textAlign='left';
+  }
+}
+
+function frame(t){
+  if(!last) last=t;
+  const dt=Math.min((t-last)/1000, 0.05);   // clamp large gaps
+  last=t;
+  update(dt); render();
+  requestAnimationFrame(frame);
+}
+
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  keys[k]=true;
+  if(k==='r'&&over) reset();
+  if(['arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+});
+addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
+
+reset();
+requestAnimationFrame(frame);
+</script>
+<!--
+  MODEL=qwen3.8:27b-mlx
+  REASONING_EFFORT=high
+  THINK=true
+  GENERATED=2026-08-15 15:24:47
+  eval_count=4037
+  -->
+<div id="comp-badge" style="position:fixed;bottom:6px;right:6px;z-index:99;font:11px monospace;color:#fff;background:#333;padding:4px 8px;border-radius:4px;">qwen3.8:27b-mlx &middot; reasoning_effort=high &middot; think=on</div>
+</body>
+</html>
