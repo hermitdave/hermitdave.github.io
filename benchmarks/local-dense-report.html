@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen 3.8 27B vs Muse Glimmer 30B — Benchmark Comparison</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d27;
+            --card-alt: #1e2130;
+            --border: #2a2d3a;
+            --text: #e4e6f0;
+            --text-muted: #8b8fa3;
+            --accent: #6366f1;
+            --accent2: #f59e0b;
+            --qwen: #22d3ee;
+            --muse: #f472b6;
+            --good: #10b981;
+            --warn: #f59e0b;
+            --bad: #ef4444;
+            --excellent: #a78bfa;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        .header { text-align: center; margin-bottom: 2rem; }
+        .header h1 {
+            font-size: 2rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--qwen), var(--muse));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+        .header .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+        .tab-nav { display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .tab-btn {
+            padding: 0.6rem 1.4rem; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--card); color: var(--text-muted); font-size: 0.85rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s ease;
+        }
+        .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+        .tab-btn.active {
+            background: linear-gradient(135deg, rgba(34,211,238,0.15), rgba(244,114,182,0.15));
+            border-color: var(--accent); color: var(--text);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 1200px; margin: 0 auto; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+        .card-full { grid-column: 1 / -1; }
+        .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); }
+        .summary-strip { display: flex; justify-content: space-around; padding: 1rem; background: var(--card-alt); border-radius: 12px; margin-bottom: 1.5rem; }
+        .summary-item { text-align: center; }
+        .summary-item .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.25rem; }
+        .summary-item .value { font-size: 1.4rem; font-weight: 800; }
+        .value.qwen { color: var(--qwen); }
+        .value.muse { color: var(--muse); }
+        .model-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+        .model-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .model-dot.qwen { background: var(--qwen); box-shadow: 0 0 8px var(--qwen); }
+        .model-dot.muse { background: var(--muse); box-shadow: 0 0 8px var(--muse); }
+        .model-name { font-weight: 700; font-size: 1rem; }
+        .model-name.qwen { color: var(--qwen); }
+        .model-name.muse { color: var(--muse); }
+        .stars { margin-left: auto; color: var(--accent2); font-size: 0.9rem; letter-spacing: 2px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+        td { padding: 0.65rem 0.75rem; border-bottom: 1px solid rgba(42, 45, 58, 0.5); }
+        tr:last-child td { border-bottom: none; }
+        .score-val { font-weight: 700; font-size: 0.85rem; min-width: 32px; text-align: right; }
+        .winner-tag { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; margin-left: 0.4rem; vertical-align: middle; }
+        .winner-tag.qwen-win { background: rgba(34, 211, 238, 0.15); color: var(--qwen); }
+        .winner-tag.muse-win { background: rgba(244, 114, 182, 0.15); color: var(--muse); }
+        .winner-tag.tie { background: rgba(139, 143, 163, 0.15); color: var(--text-muted); }
+        .chart-container { position: relative; height: 320px; }
+        .insights { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+        .insight { padding: 1rem; border-radius: 10px; font-size: 0.85rem; line-height: 1.5; }
+        .insight.qwen-insight { background: rgba(34, 211, 238, 0.08); border: 1px solid rgba(34, 211, 238, 0.2); }
+        .insight.muse-insight { background: rgba(244, 114, 182, 0.08); border: 1px solid rgba(244, 114, 182, 0.2); }
+        .insight-title { font-weight: 700; margin-bottom: 0.4rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .qwen-insight .insight-title { color: var(--qwen); }
+        .muse-insight .insight-title { color: var(--muse); }
+        .rankings-banner { display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; gap: 1rem; padding: 1.25rem; }
+        .rankings-banner .rank-item { text-align: center; }
+        .rankings-banner .rank-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+        .rankings-banner .rank-model { font-weight: 800; font-size: 1.1rem; }
+        .rankings-banner .rank-score { font-size: 2rem; font-weight: 900; }
+        .vs-divider { font-size: 1.5rem; color: var(--text-muted); }
+        .grand-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .grand-item { text-align: center; padding: 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+        .grand-item .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.4rem; }
+        .grand-item .value { font-size: 1.6rem; font-weight: 800; }
+        .rating-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.7rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; }
+        .rating-excellent { background: rgba(167, 139, 250, 0.15); color: var(--excellent); border: 1px solid rgba(167, 139, 250, 0.3); }
+        .rating-good { background: rgba(16, 185, 129, 0.15); color: var(--good); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .rating-adequate { background: rgba(245, 158, 11, 0.15); color: var(--warn); border: 1px solid rgba(245, 158, 11, 0.3); }
+        .sub-score { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .insights { grid-template-columns: 1fr; } body { padding: 1rem; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Qwen 3.8 27B vs Muse Glimmer 30B</h1>
+        <div class="subtitle">Dense Model Benchmark Comparison</div>
+    </div>
+
+    <!-- Grand Summary -->
+    <div class="grand-summary">
+        <div class="grand-item">
+            <div class="label">Benchmarks Run</div>
+            <div class="value" style="color: var(--accent);">7</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Muse Wins</div>
+            <div class="value muse">4</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Qwen Wins</div>
+            <div class="value qwen">2</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Ties</div>
+            <div class="value" style="color: var(--text);">1</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Muse</div>
+            <div class="value" style="color: var(--excellent);">★★★★★</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Qwen</div>
+            <div class="value" style="color: var(--excellent);">★★★★★</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Muse Avg Overall</div>
+            <div class="value muse">88.6</div>
+        </div>
+        <div class="grand-item">
+            <div class="label">Qwen Avg Overall</div>
+            <div class="value qwen">85.7</div>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('throughput', this)">⚡ Throughput</button>
+        <button class="tab-btn" onclick="switchTab('data-extract', this)">📊 Data Extract</button>
+        <button class="tab-btn" onclick="switchTab('agentic', this)">🤖 Agentic</button>
+        <button class="tab-btn" onclick="switchTab('structured-output', this)">📋 Structured Output</button>
+        <button class="tab-btn" onclick="switchTab('maths-reasoning', this)">🧮 Maths Reasoning</button>
+        <button class="tab-btn" onclick="switchTab('prompt-authority', this)">🛡️ Prompt Authority</button>
+        <button class="tab-btn" onclick="switchTab('instruct-follow', this)">📝 Instruct Follow</button>
+        <button class="tab-btn" onclick="switchTab('bug-find', this)">🐛 Bug Find</button>
+    </div>
+
+    <!-- ==================== AGENTIC TAB ==================== -->
+    <div id="tab-agentic" class="tab-content active">
+        <div class="grid">
+            <!-- Rankings Banner -->
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(34,211,238,0.08), rgba(244,114,182,0.08)); border: 1px solid rgba(34,211,238,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">100</div>
+                        <span class="rating-badge rating-excellent">★★★★★ Excellent</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">93</div>
+                        <span class="rating-badge rating-excellent">★★★★★ Excellent</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Strip -->
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Avg</div><div class="value qwen">100</div></div>
+                    <div class="summary-item"><div class="label">Muse Avg</div><div class="value muse">93.4</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">1</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">0</div></div>
+                    <div class="summary-item"><div class="label">Ties</div><div class="value" style="color: var(--text);">4</div></div>
+                </div>
+            </div>
+
+            <!-- Qwen Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot qwen"></div>
+                    <span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span>
+                    <span class="stars">★★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Tool Selection</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Parameter Precision</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Step Chains</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Restraint & Refusal</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">100</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Error Recovery</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Muse Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot muse"></div>
+                    <span class="model-name muse">Muse-Glimmer-30B-oQ4e</span>
+                    <span class="stars">★★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Tool Selection</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Parameter Precision</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Step Chains</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Restraint & Refusal</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--bad)">67</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Error Recovery</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bar Chart -->
+            <div class="card card-full">
+                <h2>📊 Score Comparison by Category</h2>
+                <div class="chart-container">
+                    <canvas id="agenticBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Radar Chart -->
+            <div class="card card-full">
+                <h2>🎯 Performance Profile (Radar)</h2>
+                <div class="chart-container">
+                    <canvas id="agenticRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight">
+                        <div class="insight-title">Qwen3.8-27B Profile</div>
+                        <strong>Rank 1 — ★★★★★ Excellent (100) ✓ PERFECT SCORE</strong><br>
+                        Sweeps all 5 categories. Perfect tool selection, parameter precision, multi-step chaining, restraint, and error recovery. The only perfect score across all benchmarks — this is Qwen's strongest showing.
+                    </div>
+                    <div class="insight muse-insight">
+                        <div class="insight-title">Muse-Glimmer-30B Profile</div>
+                        <strong>Rank 2 — ★★★★★ Excellent (93.4)</strong><br>
+                        Ties on 4 categories but Restraint & Refusal (67) is the weak spot. It may be more willing to attempt tool calls that should be refused — a safety concern for agentic deployments.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== STRUCTURED OUTPUT TAB ==================== -->
+    <div id="tab-structured-output" class="tab-content">
+        <div class="grid">
+            <!-- Rankings Banner -->
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(34,211,238,0.08), rgba(244,114,182,0.08)); border: 1px solid rgba(34,211,238,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">98</div>
+                        <span class="rating-badge rating-excellent">★★★★★ Excellent</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">97</div>
+                        <span class="rating-badge rating-excellent">★★★★★ Excellent</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Strip -->
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Avg</div><div class="value qwen">97.8</div></div>
+                    <div class="summary-item"><div class="label">Muse Avg</div><div class="value muse">97</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">2</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">1</div></div>
+                    <div class="summary-item"><div class="label">Ties</div><div class="value" style="color: var(--text);">2</div></div>
+                </div>
+            </div>
+
+            <!-- Qwen Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot qwen"></div>
+                    <span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span>
+                    <span class="stars">★★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Basic Single-Format</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Less Common Formats</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Complex Structures</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Conversion & Multi-Format</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--bad)">89</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Adversarial Edge Cases</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">100</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Muse Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot muse"></div>
+                    <span class="model-name muse">Muse-Glimmer-30B-oQ4e</span>
+                    <span class="stars">★★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Basic Single-Format</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Less Common Formats</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Complex Structures</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Conversion & Multi-Format</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--muse)">94</span>
+                                <span class="winner-tag muse-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Adversarial Edge Cases</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">92</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bar Chart -->
+            <div class="card card-full">
+                <h2>📊 Score Comparison by Category</h2>
+                <div class="chart-container">
+                    <canvas id="structBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Radar Chart -->
+            <div class="card card-full">
+                <h2>🎯 Performance Profile (Radar)</h2>
+                <div class="chart-container">
+                    <canvas id="structRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight">
+                        <div class="insight-title">Qwen3.8-27B Profile</div>
+                        <strong>Rank 1 — ★★★★★ Excellent (97.8)</strong><br>
+                        Wins Adversarial Edge Cases (100 vs 92). Near-perfect across the board — only Conversion & Multi-Format (89) keeps it from a perfect score. Extremely reliable for structured data output.
+                    </div>
+                    <div class="insight muse-insight">
+                        <div class="insight-title">Muse-Glimmer-30B Profile</div>
+                        <strong>Rank 2 — ★★★★★ Excellent (97)</strong><br>
+                        Wins Conversion & Multi-Format (94 vs 89). Also near-perfect — both models earn ★★★★★ Excellent. A very close benchmark decided by just 1 point overall.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MATHS REASONING TAB ==================== -->
+    <div id="tab-maths-reasoning" class="tab-content">
+        <div class="grid">
+            <!-- Rankings Banner -->
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(34,211,238,0.08), rgba(244,114,182,0.08)); border: 1px solid rgba(34,211,238,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">75</div>
+                        <span class="rating-badge rating-adequate">★★★ Adequate</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">75</div>
+                        <span class="rating-badge rating-adequate">★★★ Adequate</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Strip -->
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Avg</div><div class="value qwen">74.8</div></div>
+                    <div class="summary-item"><div class="label">Muse Avg</div><div class="value muse">75.4</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">3</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">1</div></div>
+                    <div class="summary-item"><div class="label">Ties</div><div class="value" style="color: var(--text);">1</div></div>
+                </div>
+            </div>
+
+            <!-- Qwen Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot qwen"></div>
+                    <span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span>
+                    <span class="stars">★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Everyday Arithmetic</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">95</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Logic Puzzles</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">52</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Step Word Problems</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">85</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Trick Questions and Traps</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">85</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Applied Reasoning</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--bad)">57</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Muse Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot muse"></div>
+                    <span class="model-name muse">Muse-Glimmer-30B-oQ4e</span>
+                    <span class="stars">★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Everyday Arithmetic</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">90</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Logic Puzzles</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">52</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Step Word Problems</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">75</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Trick Questions and Traps</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">75</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Applied Reasoning</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--muse)">85</span>
+                                <span class="winner-tag muse-win">WIN</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bar Chart -->
+            <div class="card card-full">
+                <h2>📊 Score Comparison by Category</h2>
+                <div class="chart-container">
+                    <canvas id="mathBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Radar Chart -->
+            <div class="card card-full">
+                <h2>🎯 Performance Profile (Radar)</h2>
+                <div class="chart-container">
+                    <canvas id="mathRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight">
+                        <div class="insight-title">Qwen3.8-27B Profile</div>
+                        <strong>Rank 1 — ★★★ Adequate (74.8)</strong><br>
+                        Wins Everyday Arithmetic (95), Multi-Step Word Problems (85), and Trick Questions (85). Strong at structured, step-by-step math. Applied Reasoning (57) is a notable weak spot.
+                    </div>
+                    <div class="insight muse-insight">
+                        <div class="insight-title">Muse-Glimmer-30B Profile</div>
+                        <strong>Rank 2 — ★★★ Adequate (75.4)</strong><br>
+                        Wins Applied Reasoning (85 vs 57) — better at novel problem types. Ties on Logic Puzzles (52). Slightly lower on rote arithmetic but stronger on lateral math thinking.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== PROMPT AUTHORITY TAB ==================== -->
+    <div id="tab-prompt-authority" class="tab-content">
+        <div class="grid">
+            <!-- Rankings Banner -->
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(244,114,182,0.08), rgba(34,211,238,0.08)); border: 1px solid rgba(244,114,182,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">93</div>
+                        <span class="rating-badge rating-excellent">★★★★★ Deployable</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">80</div>
+                        <span class="rating-badge rating-good">★★★★ Solid</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Strip -->
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Overall</div><div class="value qwen">80</div></div>
+                    <div class="summary-item"><div class="label">Muse Overall</div><div class="value muse">93</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">0</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">2</div></div>
+                    <div class="summary-item"><div class="label">Ties</div><div class="value" style="color: var(--text);">3</div></div>
+                </div>
+            </div>
+
+            <!-- Qwen Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot qwen"></div>
+                    <span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span>
+                    <span class="stars">★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Hard System vs User</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>User Overrides Defaults</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--bad)">67</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>User vs Tool Data</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Hard System vs Tool Data</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Layered Conflicts</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--bad)">33</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Muse Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot muse"></div>
+                    <span class="model-name muse">Muse-Glimmer-30B-oQ4e</span>
+                    <span class="stars">★★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Hard System vs User</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>User Overrides Defaults</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--muse)">100</span>
+                                <span class="winner-tag muse-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>User vs Tool Data</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Hard System vs Tool Data</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">100</span>
+                                <span class="winner-tag tie">TIE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Layered Conflicts</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--muse)">67</span>
+                                <span class="winner-tag muse-win">WIN</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bar Chart -->
+            <div class="card card-full">
+                <h2>📊 Score Comparison by Category</h2>
+                <div class="chart-container">
+                    <canvas id="paBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Radar Chart -->
+            <div class="card card-full">
+                <h2>🎯 Performance Profile (Radar)</h2>
+                <div class="chart-container">
+                    <canvas id="paRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight">
+                        <div class="insight-title">Qwen3.8-27B Profile</div>
+                        <strong>Rank 2 — ★★★★ Solid (80)</strong><br>
+                        Ties on 3 categories but struggles with authority conflicts. User Overrides Defaults (67) and Layered Conflicts (33) show it can slip on complex authority hierarchies — dangerous for tool-use deployments.
+                    </div>
+                    <div class="insight muse-insight">
+                        <div class="insight-title">Muse-Glimmer-30B Profile</div>
+                        <strong>Rank 1 — ★★★★★ Deployable (93) ✓</strong><br>
+                        Wins User Overrides Defaults (100 vs 67) and Layered Conflicts (67 vs 33). Far more reliable when authority conflicts arise — the benchmark explicitly rates it "deployable with untrusted tool data."
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== THROUGHPUT TAB ==================== -->
+    <div id="tab-throughput" class="tab-content active">
+        <div class="grid">
+            <!-- Header -->
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(244,114,182,0.08), rgba(34,211,238,0.08)); border: 1px solid rgba(244,114,182,0.25);">
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); margin-bottom: 0.25rem;">⚡ Throughput & Latency Comparison</div>
+                    <div style="font-weight: 800; font-size: 1.3rem; background: linear-gradient(135deg, var(--qwen), var(--muse)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Qwen 3.8 27B vs Muse Glimmer 30B</div>
+                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;">Single Request & Batch Performance • Trials: 2</div>
+                </div>
+            </div>
+
+            <!-- Single Request Results -->
+            <div class="card card-full">
+                <h2>📈 Single Request Results</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Test</th>
+                            <th>TTFT (ms)</th>
+                            <th>TPOT (ms)</th>
+                            <th>PP TPS</th>
+                            <th>TG TPS</th>
+                            <th>E2E (s)</th>
+                            <th>Throughput</th>
+                            <th>Peak Mem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="color: var(--qwen); font-weight: 700;">Qwen</td>
+                            <td>pp 4,096</td>
+                            <td>16,659.9</td>
+                            <td>48.2</td>
+                            <td>245.9</td>
+                            <td>20.9</td>
+                            <td>22.8</td>
+                            <td>185.3</td>
+                            <td>22.5 GB</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--qwen); font-weight: 700;">Qwen</td>
+                            <td>pp 16,384</td>
+                            <td>65,873.7</td>
+                            <td>56.9</td>
+                            <td>248.7</td>
+                            <td>17.7</td>
+                            <td>73.1</td>
+                            <td>225.8</td>
+                            <td>23.8 GB</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--muse); font-weight: 700;">Muse</td>
+                            <td>pp 4,096</td>
+                            <td>19,999.1</td>
+                            <td>50.4</td>
+                            <td>204.8</td>
+                            <td>20.0</td>
+                            <td>26.4</td>
+                            <td>159.9</td>
+                            <td>20.2 GB</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--muse); font-weight: 700;">Muse</td>
+                            <td>pp 16,384</td>
+                            <td>82,856.7</td>
+                            <td>60.2</td>
+                            <td>197.7</td>
+                            <td>16.7</td>
+                            <td>90.5</td>
+                            <td>182.4</td>
+                            <td>20.4 GB</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Batch Results -->
+            <div class="card card-full">
+                <h2>📊 Batch Results — Continuous Batching</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Batch</th>
+                            <th>TG TPS</th>
+                            <th>PP TPS</th>
+                            <th>Avg TTFT (ms)</th>
+                            <th>E2E (s)</th>
+                            <th>Speedup</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="color: var(--qwen); font-weight: 700;">Qwen</td>
+                            <td>1x Baseline</td>
+                            <td>20.9</td>
+                            <td>245.9</td>
+                            <td>16,659.9</td>
+                            <td>22.8</td>
+                            <td>1.0x</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--qwen); font-weight: 700;">Qwen</td>
+                            <td>2x</td>
+                            <td>31.3</td>
+                            <td>148.4</td>
+                            <td>10,403.3</td>
+                            <td>22.0</td>
+                            <td>1.50x</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--qwen); font-weight: 700;">Qwen</td>
+                            <td>4x</td>
+                            <td>39.3</td>
+                            <td>92.4</td>
+                            <td>25,716.8</td>
+                            <td>57.4</td>
+                            <td>1.88x</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--muse); font-weight: 700;">Muse</td>
+                            <td>1x Baseline</td>
+                            <td>20.0</td>
+                            <td>204.8</td>
+                            <td>19,999.1</td>
+                            <td>26.4</td>
+                            <td>1.0x</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--muse); font-weight: 700;">Muse</td>
+                            <td>2x</td>
+                            <td>29.7</td>
+                            <td>136.5</td>
+                            <td>11,392.1</td>
+                            <td>23.6</td>
+                            <td>1.48x</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--muse); font-weight: 700;">Muse</td>
+                            <td>4x</td>
+                            <td>53.1</td>
+                            <td>97.5</td>
+                            <td>24,944.7</td>
+                            <td>51.6</td>
+                            <td>2.66x</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Throughput Chart -->
+            <div class="card card-full">
+                <h2>📊 Throughput Scaling (Batch Speedup)</h2>
+                <div class="chart-container">
+                    <canvas id="throughputChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight">
+                        <div class="insight-title">Qwen 3.8 27B Throughput</div>
+                        <strong>pp 4,096:</strong> 20.9 TPS, 22.8s E2E, 22.5 GB peak<br>
+                        <strong>pp 16,384:</strong> 17.7 TPS, 73.1s E2E, 23.8 GB peak<br>
+                        <strong>Batch scaling:</strong> 1.50x at 2x batch, 1.88x at 4x batch<br>
+                        Faster TTFT than Muse (16.7s vs 20s at 4K) but worse batch scaling at 4x (39.3 vs 53.1 TPS).
+                    </div>
+                    <div class="insight muse-insight">
+                        <div class="insight-title">Muse Glimmer 30B Throughput</div>
+                        <strong>pp 4,096:</strong> 20.0 TPS, 26.4s E2E, 20.2 GB peak<br>
+                        <strong>pp 16,384:</strong> 16.7 TPS, 90.5s E2E, 20.4 GB peak<br>
+                        <strong>Batch scaling:</strong> 1.48x at 2x batch, 2.66x at 4x batch<br>
+                        Slower single-request TTFT but far superior batch scaling — 4x batch gives 2.66x speedup vs Qwen's 1.88x.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== DATA EXTRACT TAB ==================== -->
+    <div id="tab-data-extract" class="tab-content">
+        <div class="grid">
+            <!-- Rankings Banner -->
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(244,114,182,0.08), rgba(34,211,238,0.08)); border: 1px solid rgba(244,114,182,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">88</div>
+                        <span class="rating-badge rating-good">★★★★ Good</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">85</div>
+                        <span class="rating-badge rating-good">★★★★ Good</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Strip -->
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Avg</div><div class="value qwen">86.8</div></div>
+                    <div class="summary-item"><div class="label">Muse Avg</div><div class="value muse">87.8</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">3</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">2</div></div>
+                </div>
+            </div>
+
+            <!-- Qwen Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot qwen"></div>
+                    <span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span>
+                    <span class="stars">★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Clean Extraction</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">95</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Noisy and Informal</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">81</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Entity</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--bad)">67</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Implicit and Missing</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">92</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Complex Documents</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--qwen)">99</span>
+                                <span class="winner-tag qwen-win">WIN</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Muse Table -->
+            <div class="card">
+                <div class="model-header">
+                    <div class="model-dot muse"></div>
+                    <span class="model-name muse">Muse-Glimmer-30B-oQ4e</span>
+                    <span class="stars">★★★★</span>
+                </div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Clean Extraction</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--muse)">97</span>
+                                <span class="winner-tag muse-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Noisy and Informal</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">79</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Entity</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--muse)">89</span>
+                                <span class="winner-tag muse-win">WIN</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Implicit and Missing</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">91</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Complex Documents</td>
+                            <td style="text-align:right">
+                                <span class="score-val" style="color:var(--text-muted)">82</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bar Chart -->
+            <div class="card card-full">
+                <h2>📊 Score Comparison by Category</h2>
+                <div class="chart-container">
+                    <canvas id="dataExtractBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Radar Chart -->
+            <div class="card card-full">
+                <h2>🎯 Performance Profile (Radar)</h2>
+                <div class="chart-container">
+                    <canvas id="dataExtractRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight">
+                        <div class="insight-title">Qwen3.8-27B Profile</div>
+                        <strong>Rank 2 — ★★★★ Good (86.8)</strong><br>
+                        Wins Noisy and Informal (81 vs 79), Implicit and Missing (92 vs 91), and Complex Documents (99 vs 82). Excellent at messy, real-world documents. Multi-Entity (67) is the clear weak spot.
+                    </div>
+                    <div class="insight muse-insight">
+                        <div class="insight-title">Muse-Glimmer-30B Profile</div>
+                        <strong>Rank 1 — ★★★★ Good (87.8) ✓</strong><br>
+                        Wins Clean Extraction (97 vs 95) and Multi-Entity (89 vs 67). Stronger at structured, multi-entity extraction tasks. More consistent across document types.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== INSTRUCT FOLLOW TAB ==================== -->
+    <div id="tab-instruct-follow" class="tab-content">
+        <div class="grid">
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(244,114,182,0.08), rgba(34,211,238,0.08)); border: 1px solid rgba(244,114,182,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">92</div>
+                        <span class="rating-badge rating-excellent">★★★★★ Excellent</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">85</div>
+                        <span class="rating-badge rating-good">★★★★ Good</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Avg</div><div class="value qwen">85.4</div></div>
+                    <div class="summary-item"><div class="label">Muse Avg</div><div class="value muse">92</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">1</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">1</div></div>
+                    <div class="summary-item"><div class="label">Ties</div><div class="value" style="color: var(--text);">3</div></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="model-header"><div class="model-dot qwen"></div><span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span><span class="stars">★★★★</span></div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr><td>Format Constraints</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">100</span><span class="winner-tag tie">TIE</span></td></tr>
+                        <tr><td>Ordering and Sorting</td><td style="text-align:right"><span class="score-val" style="color:var(--qwen)">100</span><span class="winner-tag qwen-win">WIN</span></td></tr>
+                        <tr><td>Multi-Domain</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">100</span><span class="winner-tag tie">TIE</span></td></tr>
+                        <tr><td>Precision Under Pressure</td><td style="text-align:right"><span class="score-val" style="color:var(--bad)">27</span></td></tr>
+                        <tr><td>Adversarial</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">100</span><span class="winner-tag tie">TIE</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card">
+                <div class="model-header"><div class="model-dot muse"></div><span class="model-name muse">Muse-Glimmer-30B-oQ4e</span><span class="stars">★★★★★</span></div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr><td>Format Constraints</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">100</span><span class="winner-tag tie">TIE</span></td></tr>
+                        <tr><td>Ordering and Sorting</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">75</span></td></tr>
+                        <tr><td>Multi-Domain</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">100</span><span class="winner-tag tie">TIE</span></td></tr>
+                        <tr><td>Precision Under Pressure</td><td style="text-align:right"><span class="score-val" style="color:var(--muse)">85</span><span class="winner-tag muse-win">WIN</span></td></tr>
+                        <tr><td>Adversarial</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">100</span><span class="winner-tag tie">TIE</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card card-full"><h2>📊 Score Comparison by Category</h2><div class="chart-container"><canvas id="instructBarChart"></canvas></div></div>
+            <div class="card card-full"><h2>🎯 Performance Profile (Radar)</h2><div class="chart-container"><canvas id="instructRadarChart"></canvas></div></div>
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight"><div class="insight-title">Qwen3.8-27B Profile</div><strong>Rank 2 — ★★★★ Good (Avg 85.4)</strong><br>Wins Ordering & Sorting (100) and ties on 3 categories. Precision Under Pressure (27) is a critical weakness.</div>
+                    <div class="insight muse-insight"><div class="insight-title">Muse-Glimmer-30B Profile</div><strong>Rank 1 — ★★★★★ Excellent (Avg 92) ✓</strong><br>Wins Precision Under Pressure (85 vs 27). More consistent — no score below 75.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== BUG FIND TAB ==================== -->
+    <div id="tab-bug-find" class="tab-content">
+        <div class="grid">
+            <div class="card card-full" style="background: linear-gradient(135deg, rgba(244,114,182,0.08), rgba(34,211,238,0.08)); border: 1px solid rgba(244,114,182,0.25);">
+                <div class="rankings-banner">
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--muse);">🥇 Rank 1 — Overall</div>
+                        <div class="rank-model" style="color: var(--muse);">Muse-Glimmer-30B</div>
+                        <div class="rank-score" style="color: var(--muse);">82</div>
+                        <span class="rating-badge rating-good">★★★★ Good</span>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="rank-item">
+                        <div class="rank-label" style="color: var(--qwen);">🥈 Rank 2 — Overall</div>
+                        <div class="rank-model" style="color: var(--qwen);">Qwen3.8-27B</div>
+                        <div class="rank-score" style="color: var(--qwen);">77</div>
+                        <span class="rating-badge rating-good">★★★★ Good</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card card-full">
+                <div class="summary-strip">
+                    <div class="summary-item"><div class="label">Qwen Overall</div><div class="value qwen">77</div></div>
+                    <div class="summary-item"><div class="label">Muse Overall</div><div class="value muse">82</div></div>
+                    <div class="summary-item"><div class="label">Categories</div><div class="value" style="color: var(--text);">5</div></div>
+                    <div class="summary-item"><div class="label">Qwen Wins</div><div class="value qwen">3</div></div>
+                    <div class="summary-item"><div class="label">Muse Wins</div><div class="value muse">2</div></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="model-header"><div class="model-dot qwen"></div><span class="model-name qwen">Qwen3.8-27B-oQ4e-mtp</span><span class="stars">★★★★</span></div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr><td>Syntax & Surface</td><td style="text-align:right"><span class="score-val" style="color:var(--qwen)">100</span><span class="winner-tag qwen-win">WIN</span></td></tr>
+                        <tr><td>Logic & Algorithmic</td><td style="text-align:right"><span class="score-val" style="color:var(--qwen)">100</span><span class="winner-tag qwen-win">WIN</span></td></tr>
+                        <tr><td>Subtle & Tricky</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">33</span></td></tr>
+                        <tr><td>Red Herring Resistance</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">67</span></td></tr>
+                        <tr><td>Multi-Turn Debugging</td><td style="text-align:right"><span class="score-val" style="color:var(--qwen)">100</span><span class="winner-tag qwen-win">WIN</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card">
+                <div class="model-header"><div class="model-dot muse"></div><span class="model-name muse">Muse-Glimmer-30B-oQ4e</span><span class="stars">★★★★</span></div>
+                <table>
+                    <thead><tr><th>Benchmark</th><th style="text-align:right">Score</th></tr></thead>
+                    <tbody>
+                        <tr><td>Syntax & Surface</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">47</span></td></tr>
+                        <tr><td>Logic & Algorithmic</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">80</span></td></tr>
+                        <tr><td>Subtle & Tricky</td><td style="text-align:right"><span class="score-val" style="color:var(--muse)">100</span><span class="winner-tag muse-win">WIN</span></td></tr>
+                        <tr><td>Red Herring Resistance</td><td style="text-align:right"><span class="score-val" style="color:var(--muse)">80</span><span class="winner-tag muse-win">WIN</span></td></tr>
+                        <tr><td>Multi-Turn Debugging</td><td style="text-align:right"><span class="score-val" style="color:var(--text-muted)">90</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card card-full"><h2>📊 Score Comparison by Category</h2><div class="chart-container"><canvas id="bugBarChart"></canvas></div></div>
+            <div class="card card-full"><h2>🎯 Performance Profile (Radar)</h2><div class="chart-container"><canvas id="bugRadarChart"></canvas></div></div>
+            <div class="card card-full">
+                <h2>💡 Key Insights</h2>
+                <div class="insights">
+                    <div class="insight qwen-insight"><div class="insight-title">Qwen3.8-27B Profile</div><strong>Rank 2 — Overall 77</strong><br>Wins 3 categories with perfect 100s but Subtle & Tricky (33) drags it down significantly.</div>
+                    <div class="insight muse-insight"><div class="insight-title">Muse-Glimmer-30B Profile</div><strong>Rank 1 — Overall 82 ✓</strong><br>More consistent. 100 in Subtle & Tricky and 80 in Red Herring secure the top spot.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(name, btn) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+
+        Chart.defaults.color = '#8b8fa3';
+        Chart.defaults.borderColor = 'rgba(42, 45, 58, 0.5)';
+
+        const chartOpts = (categories) => ({
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#e4e6f0', font: { size: 12, weight: '600' }, padding: 20 } },
+                tooltip: { backgroundColor: '#1a1d27', titleColor: '#e4e6f0', bodyColor: '#e4e6f0', borderColor: '#2a2d3a', borderWidth: 1, padding: 12, cornerRadius: 8 }
+            },
+            scales: {
+                y: { beginAtZero: true, max: 110, ticks: { color: '#8b8fa3', font: { size: 11 } }, grid: { color: 'rgba(42, 45, 58, 0.5)' }, title: { display: true, text: 'Score', color: '#8b8fa3' } },
+                x: { ticks: { color: '#8b8fa3', font: { size: 10 }, maxRotation: 30 }, grid: { display: false } }
+            }
+        });
+
+        const radarOpts = (categories) => ({
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#e4e6f0', font: { size: 12, weight: '600' }, padding: 20 } },
+                tooltip: { backgroundColor: '#1a1d27', titleColor: '#e4e6f0', bodyColor: '#e4e6f0', borderColor: '#2a2d3a', borderWidth: 1, padding: 12, cornerRadius: 8 }
+            },
+            scales: {
+                r: { beginAtZero: true, max: 100, ticks: { color: '#8b8fa3', font: { size: 10 }, backdropColor: 'transparent', stepSize: 25 }, grid: { color: 'rgba(42, 45, 58, 0.6)' }, angleLines: { color: 'rgba(42, 45, 58, 0.6)' }, pointLabels: { color: '#e4e6f0', font: { size: 11, weight: '500' } } }
+            }
+        });
+
+        // ============ THROUGHPUT ============
+        const throughputCats = ['1x Baseline', '2x Batch', '4x Batch'];
+        const qwenTG = [20.9, 31.3, 39.3];
+        const museTG = [20.0, 29.7, 53.1];
+        const qwenSpeedup = [1.0, 1.50, 1.88];
+        const museSpeedup = [1.0, 1.48, 2.66];
+
+        new Chart(document.getElementById('throughputChart'), {
+            type: 'bar',
+            data: {
+                labels: throughputCats,
+                datasets: [
+                    {
+                        label: 'Qwen TG TPS',
+                        data: qwenTG,
+                        backgroundColor: 'rgba(34, 211, 238, 0.7)',
+                        borderColor: '#22d3ee',
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        yAxisID: 'y',
+                    },
+                    {
+                        label: 'Muse TG TPS',
+                        data: museTG,
+                        backgroundColor: 'rgba(244, 114, 182, 0.7)',
+                        borderColor: '#f472b6',
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        yAxisID: 'y',
+                    },
+                    {
+                        label: 'Qwen Speedup',
+                        data: qwenSpeedup,
+                        type: 'line',
+                        borderColor: '#22d3ee',
+                        backgroundColor: 'rgba(34, 211, 238, 0.15)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#22d3ee',
+                        pointBorderColor: '#22d3ee',
+                        pointRadius: 5,
+                        yAxisID: 'y1',
+                        fill: true,
+                    },
+                    {
+                        label: 'Muse Speedup',
+                        data: museSpeedup,
+                        type: 'line',
+                        borderColor: '#f472b6',
+                        backgroundColor: 'rgba(244, 114, 182, 0.15)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#f472b6',
+                        pointBorderColor: '#f472b6',
+                        pointRadius: 5,
+                        yAxisID: 'y1',
+                        fill: true,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#e4e6f0', font: { size: 12, weight: '600' }, padding: 20 } },
+                    tooltip: { backgroundColor: '#1a1d27', titleColor: '#e4e6f0', bodyColor: '#e4e6f0', borderColor: '#2a2d3a', borderWidth: 1, padding: 12, cornerRadius: 8 }
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        max: 60,
+                        ticks: { color: '#8b8fa3', font: { size: 11 } },
+                        grid: { color: 'rgba(42, 45, 58, 0.5)' },
+                        title: { display: true, text: 'TG TPS', color: '#8b8fa3' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 3,
+                        ticks: { color: '#8b8fa3', font: { size: 11 }, callback: (v) => v + 'x' },
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Speedup', color: '#8b8fa3' }
+                    },
+                    x: { ticks: { color: '#8b8fa3', font: { size: 11 } }, grid: { display: false } }
+                }
+            }
+        });
+
+        // ============ DATA EXTRACT ============
+        const dataExtractCats = ['Clean Extraction', 'Noisy and Informal', 'Multi-Entity', 'Implicit and Missing', 'Complex Documents'];
+        const dataExtractQwen = [95, 81, 67, 92, 99];
+        const dataExtractMuse = [97, 79, 89, 91, 82];
+
+        new Chart(document.getElementById('dataExtractBarChart'), {
+            type: 'bar',
+            data: { labels: dataExtractCats, datasets: [
+                { label: 'Qwen3.8-27B', data: dataExtractQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: dataExtractMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(dataExtractCats)
+        });
+        new Chart(document.getElementById('dataExtractRadarChart'), {
+            type: 'radar',
+            data: { labels: dataExtractCats, datasets: [
+                { label: 'Qwen3.8-27B', data: dataExtractQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: dataExtractMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(dataExtractCats)
+        });
+
+        // ============ INSTRUCT FOLLOW ============
+        const instructCats = ['Format Constraints', 'Ordering and Sorting', 'Multi-Domain', 'Precision Under Pressure', 'Adversarial'];
+        const instructQwen = [100, 100, 100, 27, 100];
+        const instructMuse = [100, 75, 100, 85, 100];
+
+        new Chart(document.getElementById('instructBarChart'), {
+            type: 'bar',
+            data: { labels: instructCats, datasets: [
+                { label: 'Qwen3.8-27B', data: instructQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: instructMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(instructCats)
+        });
+        new Chart(document.getElementById('instructRadarChart'), {
+            type: 'radar',
+            data: { labels: instructCats, datasets: [
+                { label: 'Qwen3.8-27B', data: instructQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: instructMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(instructCats)
+        });
+
+        // ============ AGENTIC ============
+        const agenticCats = ['Tool Selection', 'Parameter Precision', 'Multi-Step Chains', 'Restraint & Refusal', 'Error Recovery'];
+        const agenticQwen = [100, 100, 100, 100, 100];
+        const agenticMuse = [100, 100, 100, 67, 100];
+
+        new Chart(document.getElementById('agenticBarChart'), {
+            type: 'bar',
+            data: { labels: agenticCats, datasets: [
+                { label: 'Qwen3.8-27B', data: agenticQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: agenticMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(agenticCats)
+        });
+        new Chart(document.getElementById('agenticRadarChart'), {
+            type: 'radar',
+            data: { labels: agenticCats, datasets: [
+                { label: 'Qwen3.8-27B', data: agenticQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: agenticMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(agenticCats)
+        });
+
+        // ============ STRUCTURED OUTPUT ============
+        const structCats = ['Basic Single-Format', 'Less Common Formats', 'Complex Structures', 'Conversion & Multi-Format', 'Adversarial Edge Cases'];
+        const structQwen = [100, 100, 100, 89, 100];
+        const structMuse = [100, 100, 100, 94, 92];
+
+        new Chart(document.getElementById('structBarChart'), {
+            type: 'bar',
+            data: { labels: structCats, datasets: [
+                { label: 'Qwen3.8-27B', data: structQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: structMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(structCats)
+        });
+        new Chart(document.getElementById('structRadarChart'), {
+            type: 'radar',
+            data: { labels: structCats, datasets: [
+                { label: 'Qwen3.8-27B', data: structQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: structMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(structCats)
+        });
+
+        // ============ MATHS REASONING ============
+        const mathCats = ['Everyday Arithmetic', 'Logic Puzzles', 'Multi-Step Word Problems', 'Trick Questions and Traps', 'Applied Reasoning'];
+        const mathQwen = [95, 52, 85, 85, 57];
+        const mathMuse = [90, 52, 75, 75, 85];
+
+        new Chart(document.getElementById('mathBarChart'), {
+            type: 'bar',
+            data: { labels: mathCats, datasets: [
+                { label: 'Qwen3.8-27B', data: mathQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: mathMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(mathCats)
+        });
+        new Chart(document.getElementById('mathRadarChart'), {
+            type: 'radar',
+            data: { labels: mathCats, datasets: [
+                { label: 'Qwen3.8-27B', data: mathQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: mathMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(mathCats)
+        });
+
+        // ============ PROMPT AUTHORITY ============
+        const paCats = ['Hard System vs User', 'User Overrides Defaults', 'User vs Tool Data', 'Hard System vs Tool Data', 'Layered Conflicts'];
+        const paQwen = [100, 67, 100, 100, 33];
+        const paMuse = [100, 100, 100, 100, 67];
+
+        new Chart(document.getElementById('paBarChart'), {
+            type: 'bar',
+            data: { labels: paCats, datasets: [
+                { label: 'Qwen3.8-27B', data: paQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: paMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(paCats)
+        });
+        new Chart(document.getElementById('paRadarChart'), {
+            type: 'radar',
+            data: { labels: paCats, datasets: [
+                { label: 'Qwen3.8-27B', data: paQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: paMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(paCats)
+        });
+
+        // ============ DATA EXTRACT ============
+        const dataCats = ['Format Constraints', 'Ordering and Sorting', 'Multi-Domain', 'Precision Under Pressure', 'Adversarial'];
+        const dataQwen = [100, 100, 100, 27, 100];
+        const dataMuse = [100, 75, 100, 85, 100];
+
+        new Chart(document.getElementById('dataBarChart'), {
+            type: 'bar',
+            data: { labels: dataCats, datasets: [
+                { label: 'Qwen3.8-27B', data: dataQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: dataMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(dataCats)
+        });
+        new Chart(document.getElementById('dataRadarChart'), {
+            type: 'radar',
+            data: { labels: dataCats, datasets: [
+                { label: 'Qwen3.8-27B', data: dataQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: dataMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(dataCats)
+        });
+
+        // ============ BUG FIND ============
+        const bugCats = ['Syntax & Surface', 'Logic & Algorithmic', 'Subtle & Tricky', 'Red Herring Resistance', 'Multi-Turn Debugging'];
+        const bugQwen = [100, 100, 33, 67, 100];
+        const bugMuse = [47, 80, 100, 80, 90];
+
+        new Chart(document.getElementById('bugBarChart'), {
+            type: 'bar',
+            data: { labels: bugCats, datasets: [
+                { label: 'Qwen3.8-27B', data: bugQwen, backgroundColor: 'rgba(34, 211, 238, 0.7)', borderColor: '#22d3ee', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 },
+                { label: 'Muse-Glimmer-30B', data: bugMuse, backgroundColor: 'rgba(244, 114, 182, 0.7)', borderColor: '#f472b6', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }
+            ]}, options: chartOpts(bugCats)
+        });
+        new Chart(document.getElementById('bugRadarChart'), {
+            type: 'radar',
+            data: { labels: bugCats, datasets: [
+                { label: 'Qwen3.8-27B', data: bugQwen, backgroundColor: 'rgba(34, 211, 238, 0.15)', borderColor: '#22d3ee', borderWidth: 2, pointBackgroundColor: '#22d3ee', pointBorderColor: '#22d3ee', pointRadius: 4 },
+                { label: 'Muse-Glimmer-30B', data: bugMuse, backgroundColor: 'rgba(244, 114, 182, 0.15)', borderColor: '#f472b6', borderWidth: 2, pointBackgroundColor: '#f472b6', pointBorderColor: '#f472b6', pointRadius: 4 }
+            ]}, options: radarOpts(bugCats)
+        });
+    </script>
+</body>
+</html>
