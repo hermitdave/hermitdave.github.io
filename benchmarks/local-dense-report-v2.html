@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3-Way MoE Comparison — K2 Horizon vs Qwen 3.6 vs Ornith 1.5</title>
+<title>Qwen 3.8 27B vs Muse Glimmer 30B — Dense Model Benchmark Report</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -14,12 +14,12 @@
   --text: #e8e8f0;
   --text-muted: #8888a0;
   --accent: #6366f1;
-  --k2: #f59e0b;
-  --k2-rgb: 245, 158, 11;
-  --qwen: #06b6d4;
-  --qwen-rgb: 6, 182, 212;
-  --ornith: #a855f7;
-  --ornith-rgb: 168, 85, 247;
+  --qwen: #22d3ee;
+  --qwen-rgb: 34, 211, 238;
+  --muse: #f472b6;
+  --muse-rgb: 244, 114, 182;
+  --win: #22c55e;
+  --lose: #ef4444;
   --radius: 12px;
   --radius-sm: 8px;
 }
@@ -67,9 +67,8 @@ header p { color: var(--text-muted); font-size: 0.875rem; }
 .card .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
 .card .value { font-size: 2rem; font-weight: 700; line-height: 1; }
 .card .sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
-.card.k2 .value { color: var(--k2); }
 .card.qwen .value { color: var(--qwen); }
-.card.ornith .value { color: var(--ornith); }
+.card.muse .value { color: var(--muse); }
 
 .model-strip {
   display: flex;
@@ -85,9 +84,8 @@ header p { color: var(--text-muted); font-size: 0.875rem; }
   border: 1px solid var(--border);
   background: var(--surface);
 }
-.model-badge.k2 { border-left: 3px solid var(--k2); }
 .model-badge.qwen { border-left: 3px solid var(--qwen); }
-.model-badge.ornith { border-left: 3px solid var(--ornith); }
+.model-badge.muse { border-left: 3px solid var(--muse); }
 .model-badge .name { font-weight: 600; font-size: 0.9rem; }
 .model-badge .detail { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
 
@@ -133,34 +131,24 @@ header p { color: var(--text-muted); font-size: 0.875rem; }
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-  table-layout: fixed;
 }
-.detail-table th:nth-child(1) { width: 28%; }
-.detail-table th:nth-child(2),
-.detail-table th:nth-child(3),
-.detail-table th:nth-child(4) { width: 18%; }
-.detail-table th:nth-child(5) { width: 20%; }
 .detail-table th {
-  text-align: center;
-  padding: 12px 8px;
+  text-align: left;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.detail-table th:first-child { text-align: left; }
 .detail-table td {
-  padding: 12px 8px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  text-align: center;
 }
-.detail-table td:first-child { text-align: left; }
 .detail-table tr:last-child td { border-bottom: none; }
 .detail-table .metric { color: var(--text-muted); }
-.detail-table .k2-val { color: var(--k2); font-weight: 600; }
 .detail-table .qwen-val { color: var(--qwen); font-weight: 600; }
-.detail-table .ornith-val { color: var(--ornith); font-weight: 600; }
+.detail-table .muse-val { color: var(--muse); font-weight: 600; }
 .detail-table .winner { font-weight: 700; }
 .detail-table .score-row { font-weight: 700; font-size: 1rem; background: var(--surface-alt); }
 
@@ -180,9 +168,8 @@ header p { color: var(--text-muted); font-size: 0.875rem; }
   min-width: 40px;
   transition: width 0.6s ease;
 }
-.tp-bar.k2 { background: var(--k2); }
 .tp-bar.qwen { background: var(--qwen); }
-.tp-bar.ornith { background: var(--ornith); }
+.tp-bar.muse { background: var(--muse); }
 
 .verdict-grid {
   display: grid;
@@ -197,10 +184,23 @@ header p { color: var(--text-muted); font-size: 0.875rem; }
 }
 .verdict-card h4 { font-size: 0.85rem; margin-bottom: 8px; }
 .verdict-card .winner { font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
-.verdict-card .winner.k2 { color: var(--k2); }
 .verdict-card .winner.qwen { color: var(--qwen); }
-.verdict-card .winner.ornith { color: var(--ornith); }
+.verdict-card .winner.muse { color: var(--muse); }
+.verdict-card .winner.tie { color: var(--text-muted); }
 .verdict-card p { font-size: 0.8rem; color: var(--text-muted); }
+
+.rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.rating-excellent { background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.3); }
+.rating-good { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+.rating-adequate { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
 
 footer {
   margin-top: 64px;
@@ -220,47 +220,43 @@ footer {
 <div class="container">
 
 <header>
-  <h1>3-Way MoE Model Comparison</h1>
-  <p>K2 Horizon 36B A4B &nbsp;vs&nbsp; Qwen 3.6 35B A3B &nbsp;vs&nbsp; Ornith 1.5 35B A3B &mdash; 8 benchmarks + throughput</p>
+  <h1>Dense Model Benchmark Comparison</h1>
+  <p>Qwen 3.8 27B &nbsp;vs&nbsp; Muse Glimmer 30B &mdash; 7 benchmarks + throughput</p>
 </header>
 
 <!-- Summary Cards -->
 <div class="summary-grid">
-  <div class="card k2">
-    <div class="label">K2 Horizon Wins</div>
+  <div class="card muse">
+    <div class="label">Muse Glimmer Wins</div>
     <div class="value">4</div>
-    <div class="sub">Avg: 82.4</div>
-  </div>
-  <div class="card ornith">
-    <div class="label">Ornith 1.5 Wins</div>
-    <div class="value">3</div>
-    <div class="sub">Avg: 82.4</div>
+    <div class="sub">Avg: 88.6</div>
   </div>
   <div class="card qwen">
-    <div class="label">Qwen 3.6 Wins</div>
-    <div class="value">1</div>
-    <div class="sub">Avg: 73.4</div>
+    <div class="label">Qwen 3.8 Wins</div>
+    <div class="value">2</div>
+    <div class="sub">Avg: 85.7</div>
   </div>
   <div class="card">
-    <div class="label">Throughput (1x / 8x)</div>
-    <div class="value" style="color:var(--qwen)">88 / 672</div>
-    <div class="sub">Qwen fastest single, Ornith wins batch</div>
+    <div class="label">Ties</div>
+    <div class="value" style="color:var(--text-muted)">1</div>
+    <div class="sub">Reasoning & Maths</div>
+  </div>
+  <div class="card">
+    <div class="label">Throughput (1x)</div>
+    <div class="value" style="color:var(--qwen)">~1.0x</div>
+    <div class="sub">Similar single-stream TPS</div>
   </div>
 </div>
 
 <!-- Model Badges -->
 <div class="model-strip">
-  <div class="model-badge k2">
-    <div class="name">K2 Horizon 36B A4B</div>
-    <div class="detail">36B total / 4B active &bull; MoVA &bull; 512K context &bull; oQ4e</div>
-  </div>
   <div class="model-badge qwen">
-    <div class="name">Qwen 3.6 35B A3B</div>
-    <div class="detail">35B total / 3B active &bull; Hybrid DeltaNet+Attn &bull; 1M context &bull; oQ4e-mtp</div>
+    <div class="name">Qwen 3.8 27B</div>
+    <div class="detail">27B dense &bull; oQ4e-mtp &bull; Hybrid DeltaNet+Attn</div>
   </div>
-  <div class="model-badge ornith">
-    <div class="name">Ornith 1.5 35B A3B</div>
-    <div class="detail">35B total / 3B active &bull; Hybrid 30L+10A &bull; 262K context &bull; oQ4e-mtp</div>
+  <div class="model-badge muse">
+    <div class="name">Muse Glimmer 30B</div>
+    <div class="detail">30B dense &bull; oQ4e &bull; Full attention</div>
   </div>
 </div>
 
@@ -301,7 +297,7 @@ footer {
       <div class="tp-bar-wrap" id="tpSingle"></div>
     </div>
     <div class="chart-wrap">
-      <h3 style="font-size:0.9rem;margin-bottom:16px">Batch Scaling (8x)</h3>
+      <h3 style="font-size:0.9rem;margin-bottom:16px">Batch Scaling (4x)</h3>
       <div class="tp-bar-wrap" id="tpBatch"></div>
     </div>
   </div>
@@ -316,38 +312,33 @@ footer {
   <div class="verdict-grid">
     <div class="verdict-card">
       <h4>Quality (Avg Score)</h4>
-      <div class="winner k2">K2 Horizon / Ornith 1.5 (tie)</div>
-      <p>Both average 82.4. K2 wins 4 benchmarks, Ornith wins 3. Different strengths.</p>
+      <div class="winner muse">Muse Glimmer 30B</div>
+      <p>Wins 4/7 benchmarks, avg 88.6. Stronger at prompt authority, instruct follow, bug find, data extraction.</p>
     </div>
     <div class="verdict-card">
       <h4>Throughput (Single)</h4>
-      <div class="winner qwen">Qwen 3.6</div>
-      <p>88.4 TG TPS at 1x. ~1.8x faster than K2. MTP + 3B active advantage.</p>
+      <div class="winner tie">Near Tie</div>
+      <p>Qwen: 20.9 TG TPS, Muse: 20.0 TG TPS. Qwen faster TTFT (16.7s vs 20s) but similar generation speed.</p>
     </div>
     <div class="verdict-card">
       <h4>Throughput (Batch)</h4>
-      <div class="winner ornith">Ornith 1.5</div>
-      <p>671.6 TG TPS at 8x batch. Beats Qwen (648) and K2 (354). Best scaling.</p>
+      <div class="winner muse">Muse Glimmer 30B</div>
+      <p>4x batch: Muse 53.1 TPS vs Qwen 39.3 TPS. 2.66x speedup vs 1.88x. Better batch scaling.</p>
     </div>
     <div class="verdict-card">
       <h4>Tool Calling</h4>
-      <div class="winner ornith">Ornith 1.5</div>
-      <p>Perfect 100/100. Sweeps all 5 categories. K2 close at 93.</p>
+      <div class="winner qwen">Qwen 3.8 27B</div>
+      <p>Perfect 100/100. Sweeps all 5 categories. Muse scores 93.4 (Restraint & Refusal: 67).</p>
     </div>
     <div class="verdict-card">
       <h4>Safety</h4>
-      <div class="winner k2">K2 Horizon</div>
-      <p>0 harmful violations. Perfect on Hard System vs Tool Data. PA=80.</p>
+      <div class="winner muse">Muse Glimmer 30B</div>
+      <p>Prompt authority: 93 vs 80. Better at authority conflicts and layered instructions.</p>
     </div>
     <div class="verdict-card">
-      <h4>Agentic (Hermes)</h4>
-      <div class="winner ornith">Ornith 1.5</div>
-      <p>85/100 on Hermes agent suite. Perfect Memory & Recall. Strong delegation.</p>
-    </div>
-    <div class="verdict-card">
-      <h4>Multimodal</h4>
-      <div class="winner k2">K2 Horizon / Qwen 3.6</div>
-      <p>Qwen: text+image+video. K2: text-only. Ornith: text+image.</p>
+      <h4>Memory Efficiency</h4>
+      <div class="winner muse">Muse Glimmer 30B</div>
+      <p>20.2 GB peak vs 22.5 GB. 30B model uses less memory than 27B Qwen — more efficient attention.</p>
     </div>
   </div>
 </section>
@@ -359,22 +350,19 @@ footer {
 </div>
 
 <script>
-const K2_COLOR = '#f59e0b';
-const QWEN_COLOR = '#06b6d4';
-const ORNITH_COLOR = '#a855f7';
-const K2_RGB = '245, 158, 11';
-const QWEN_RGB = '6, 182, 212';
-const ORNITH_RGB = '168, 85, 247';
+const QWEN_COLOR = '#22d3ee';
+const MUSE_COLOR = '#f472b6';
+const QWEN_RGB = '34, 211, 238';
+const MUSE_RGB = '244, 114, 182';
 
 const benchmarks = [
-  { id: 'b1', name: 'Bugfind', k2: 76, qwen: 73, ornith: 73, cats: ['Syntax','Logic','Subtle','RedHerring','MultiTurn'], k2s: [67,100,67,53,90], qws: [67,100,100,67,0], os: [67,80,67,70,80] },
-  { id: 'b2', name: 'Extraction', k2: 90, qwen: 84, ornith: 81, cats: ['Clean','Noisy','MultiEnt','Implicit','Complex'], k2s: [95,89,94,89,82], qws: [85,79,85,87,84], os: [83,74,84,87,74] },
-  { id: 'b3', name: 'Formatting', k2: 93, qwen: 92, ornith: 99, cats: ['Constraints','Sorting','MultiDom','Precision','Adversarial'], k2s: [100,100,100,67,100], qws: [80,100,100,78,100], os: [100,100,100,93,100] },
-  { id: 'b4', name: 'Authority', k2: 80, qwen: 60, ornith: 73, cats: ['SysVsUser','UserOvr','UserVsTool','SysVsTool','Layered'], k2s: [67,67,100,100,67], qws: [67,100,100,0,33], os: [100,100,100,33,33] },
-  { id: 'b5', name: 'Reasoning', k2: 78, qwen: 80, ornith: 72, cats: ['Arithmetic','Logic','WordProb','Tricks','Applied'], k2s: [95,52,85,85,85], qws: [100,52,85,90,85], os: [77,28,85,95,85] },
-  { id: 'b6', name: 'Structured', k2: 95, qwen: 87, ornith: 76, cats: ['Basic','Uncommon','Complex','Conversion','Edge'], k2s: [100,94,100,89,92], qws: [100,67,100,75,92], os: [67,86,71,61,92] },
-  { id: 'b7', name: 'Tool Call', k2: 93, qwen: 63, ornith: 100, cats: ['Selection','Params','Chains','Restraint','Recovery'], k2s: [100,100,83,83,100], qws: [100,67,33,83,33], os: [100,100,100,100,100] },
-  { id: 'b8', name: 'Agent', k2: 54, qwen: 48, ornith: 85, cats: ['Memory','Workspace','Skills','Schedule','Delegation'], k2s: [84,20,53,64,51], qws: [41,34,55,70,40], os: [100,83,78,78,89] }
+  { id: 'b1', name: 'Data Extract', qwen: 85, muse: 88, cats: ['Clean','Noisy','MultiEnt','Implicit','Complex'], qs: [95,81,67,92,99], ms: [97,79,89,91,82] },
+  { id: 'b2', name: 'Agentic', qwen: 100, muse: 93, cats: ['Tool Selection','Parameter Precision','Multi-Step','Restraint','Error Recovery'], qs: [100,100,100,100,100], ms: [100,100,100,67,100] },
+  { id: 'b3', name: 'Structured', qwen: 98, muse: 97, cats: ['Basic','Uncommon','Complex','Conversion','Edge'], qs: [100,100,100,89,100], ms: [100,100,100,94,92] },
+  { id: 'b4', name: 'Reasoning', qwen: 75, muse: 75, cats: ['Arithmetic','Logic','Word Problems','Tricks','Applied'], qs: [95,52,85,85,57], ms: [90,52,75,75,85] },
+  { id: 'b5', name: 'Authority', qwen: 80, muse: 93, cats: ['SysVsUser','UserOvr','UserVsTool','SysVsTool','Layered'], qs: [100,67,100,100,33], ms: [100,100,100,100,67] },
+  { id: 'b6', name: 'Instruct', qwen: 85, muse: 92, cats: ['Constraints','Sorting','Multi-Domain','Precision','Adversarial'], qs: [100,100,100,27,100], ms: [100,75,100,85,100] },
+  { id: 'b7', name: 'Bug Find', qwen: 77, muse: 82, cats: ['Syntax','Logic','Subtle','RedHerring','MultiTurn'], qs: [100,100,33,67,100], ms: [47,80,100,80,90] }
 ];
 
 // Radar Chart
@@ -383,9 +371,8 @@ new Chart(document.getElementById('radarChart'), {
   data: {
     labels: benchmarks.map(b => b.name),
     datasets: [
-      { label: 'K2 Horizon', data: benchmarks.map(b => b.k2), borderColor: K2_COLOR, backgroundColor: `rgba(${K2_RGB}, 0.15)`, pointBackgroundColor: K2_COLOR, pointBorderColor: K2_COLOR, borderWidth: 2 },
-      { label: 'Qwen 3.6', data: benchmarks.map(b => b.qwen), borderColor: QWEN_COLOR, backgroundColor: `rgba(${QWEN_RGB}, 0.15)`, pointBackgroundColor: QWEN_COLOR, pointBorderColor: QWEN_COLOR, borderWidth: 2 },
-      { label: 'Ornith 1.5', data: benchmarks.map(b => b.ornith), borderColor: ORNITH_COLOR, backgroundColor: `rgba(${ORNITH_RGB}, 0.15)`, pointBackgroundColor: ORNITH_COLOR, pointBorderColor: ORNITH_COLOR, borderWidth: 2 }
+      { label: 'Qwen 3.8 27B', data: benchmarks.map(b => b.qwen), borderColor: QWEN_COLOR, backgroundColor: `rgba(${QWEN_RGB}, 0.15)`, pointBackgroundColor: QWEN_COLOR, pointBorderColor: QWEN_COLOR, borderWidth: 2 },
+      { label: 'Muse Glimmer 30B', data: benchmarks.map(b => b.muse), borderColor: MUSE_COLOR, backgroundColor: `rgba(${MUSE_RGB}, 0.15)`, pointBackgroundColor: MUSE_COLOR, pointBorderColor: MUSE_COLOR, borderWidth: 2 }
     ]
   },
   options: {
@@ -403,9 +390,8 @@ new Chart(document.getElementById('barChart'), {
   data: {
     labels: benchmarks.map(b => b.name),
     datasets: [
-      { label: 'K2 Horizon', data: benchmarks.map(b => b.k2), backgroundColor: `rgba(${K2_RGB}, 0.8)`, borderRadius: 4 },
-      { label: 'Qwen 3.6', data: benchmarks.map(b => b.qwen), backgroundColor: `rgba(${QWEN_RGB}, 0.8)`, borderRadius: 4 },
-      { label: 'Ornith 1.5', data: benchmarks.map(b => b.ornith), backgroundColor: `rgba(${ORNITH_RGB}, 0.8)`, borderRadius: 4 }
+      { label: 'Qwen 3.8 27B', data: benchmarks.map(b => b.qwen), backgroundColor: `rgba(${QWEN_RGB}, 0.8)`, borderRadius: 4 },
+      { label: 'Muse Glimmer 30B', data: benchmarks.map(b => b.muse), backgroundColor: `rgba(${MUSE_RGB}, 0.8)`, borderRadius: 4 }
     ]
   },
   options: {
@@ -425,19 +411,17 @@ const tableEl = document.getElementById('detailTable');
 let detailChart;
 
 function getWinner(b) {
-  const max = Math.max(b.k2, b.qwen, b.ornith);
-  const winners = [];
-  if (b.k2 === max) winners.push('K2');
-  if (b.qwen === max) winners.push('Qwen');
-  if (b.ornith === max) winners.push('Ornith');
-  return winners.join(' / ');
+  if (b.qwen > b.muse) return 'Qwen';
+  if (b.muse > b.qwen) return 'Muse';
+  return 'Tie';
 }
 
 function renderNav() {
   navEl.innerHTML = benchmarks.map((b, i) => {
     const w = getWinner(b);
+    const color = w === 'Qwen' ? `color:${QWEN_COLOR}` : w === 'Muse' ? `color:${MUSE_COLOR}` : `color:var(--text-muted)`;
     return `<button class="bench-btn ${i === activeBench ? 'active' : ''}" data-idx="${i}">
-      ${b.name} <span style="opacity:0.6">(${w})</span>
+      ${b.name} <span style="opacity:0.6;${color}">${w}${w !== 'Tie' ? ' +' + Math.abs(b.qwen - b.muse) : ''}</span>
     </button>`;
   }).join('');
   
@@ -454,19 +438,23 @@ function renderDetail() {
   const b = benchmarks[activeBench];
   const cats = b.cats;
   
+  // Rating badge
+  const avg = (b.qwen + b.muse) / 2;
+  const rating = avg >= 95 ? 'excellent' : avg >= 80 ? 'good' : 'adequate';
+  const ratingText = avg >= 95 ? 'Excellent' : avg >= 80 ? 'Good' : 'Adequate';
+  
   // Table
-  let html = `<tr><th>Category</th><th style="color:${K2_COLOR}">K2</th><th style="color:${QWEN_COLOR}">Qwen</th><th style="color:${ORNITH_COLOR}">Ornith</th><th>Winner</th></tr>`;
+  let html = `<tr><th>Category</th><th style="text-align:right;color:${QWEN_COLOR}">Qwen</th><th style="text-align:right;color:${MUSE_COLOR}">Muse</th><th style="text-align:center">Winner</th></tr>`;
   cats.forEach((c, i) => {
-    const vals = [b.k2s[i], b.qws[i], b.os[i]];
-    const max = Math.max(...vals);
-    const wk = b.k2s[i] === max;
-    const wq = b.qws[i] === max;
-    const wo = b.os[i] === max;
-    const winnerText = (wk ? 'K2 ' : '') + (wq ? 'Qwen ' : '') + (wo ? 'Ornith' : '');
-    html += `<tr><td class="metric">${c}</td><td class="k2-val">${b.k2s[i]}</td><td class="qwen-val">${b.qws[i]}</td><td class="ornith-val">${b.os[i]}</td><td style="text-align:center"><span class="winner" style="color:${wk ? K2_COLOR : wq ? QWEN_COLOR : ORNITH_COLOR}">${winnerText.trim()}</span></td></tr>`;
+    const wq = b.qs[i] > b.ms[i];
+    const wm = b.ms[i] > b.qs[i];
+    const winnerText = wq ? 'Qwen' : wm ? 'Muse' : 'Tie';
+    const winnerColor = wq ? `color:${QWEN_COLOR}` : wm ? `color:${MUSE_COLOR}` : `color:var(--text-muted)`;
+    html += `<tr><td class="metric">${c}</td><td class="qwen-val">${b.qs[i]}</td><td class="muse-val">${b.ms[i]}</td><td style="text-align:center"><span class="winner" style="${winnerColor}">${winnerText}</span></td></tr>`;
   });
-  const overallMax = Math.max(b.k2, b.qwen, b.ornith);
-  html += `<tr class="score-row"><td class="metric">Overall</td><td class="k2-val">${b.k2}</td><td class="qwen-val">${b.qwen}</td><td class="ornith-val">${b.ornith}</td><td style="text-align:center"><span class="winner" style="color:${b.k2 === overallMax ? K2_COLOR : b.qwen === overallMax ? QWEN_COLOR : ORNITH_COLOR}">${getWinner(b)}</span></td></tr>`;
+  const overallWinner = getWinner(b);
+  const overallColor = overallWinner === 'Qwen' ? `color:${QWEN_COLOR}` : overallWinner === 'Muse' ? `color:${MUSE_COLOR}` : `color:var(--text-muted)`;
+  html += `<tr class="score-row"><td class="metric">Overall</td><td class="qwen-val">${b.qwen}</td><td class="muse-val">${b.muse}</td><td style="text-align:center"><span class="winner" style="${overallColor}">${overallWinner}${overallWinner !== 'Tie' ? ' +' + Math.abs(b.qwen - b.muse) : ''}</span></td></tr>`;
   tableEl.innerHTML = html;
   
   // Chart
@@ -476,9 +464,8 @@ function renderDetail() {
     data: {
       labels: cats,
       datasets: [
-        { label: 'K2 Horizon', data: b.k2s, backgroundColor: `rgba(${K2_RGB}, 0.8)`, borderRadius: 4 },
-        { label: 'Qwen 3.6', data: b.qws, backgroundColor: `rgba(${QWEN_RGB}, 0.8)`, borderRadius: 4 },
-        { label: 'Ornith 1.5', data: b.os, backgroundColor: `rgba(${ORNITH_RGB}, 0.8)`, borderRadius: 4 }
+        { label: 'Qwen 3.8 27B', data: b.qs, backgroundColor: `rgba(${QWEN_RGB}, 0.8)`, borderRadius: 4 },
+        { label: 'Muse Glimmer 30B', data: b.ms, backgroundColor: `rgba(${MUSE_RGB}, 0.8)`, borderRadius: 4 }
       ]
     },
     options: {
@@ -498,47 +485,42 @@ renderDetail();
 // Throughput Bars
 function renderTpBars() {
   const single = [
-    { label: 'TG TPS', k2: 48.1, qwen: 88.4, ornith: 80.6 },
-    { label: 'TTFT (ms)', k2: 6300, qwen: 2371, ornith: 2406, invert: true },
-    { label: 'TPOT (ms)', k2: 20.9, qwen: 11.4, ornith: 12.5, invert: true },
-    { label: 'PP TPS', k2: 650, qwen: 1728, ornith: 1702 }
+    { label: 'TG TPS', qwen: 20.9, muse: 20.0 },
+    { label: 'TTFT (ms)', qwen: 16660, muse: 19999, invert: true },
+    { label: 'TPOT (ms)', qwen: 48.2, muse: 50.4, invert: true },
+    { label: 'PP TPS', qwen: 245.9, muse: 204.8 }
   ];
   
-  const maxSingle = Math.max(...single.flatMap(s => [s.k2, s.qwen, s.ornith]));
+  const maxSingle = Math.max(...single.flatMap(s => [s.qwen, s.muse]));
   
   document.getElementById('tpSingle').innerHTML = single.map(s => {
-    const k2w = (s.invert ? Math.max(s.qwen, s.ornith) : s.k2) / maxSingle * 100;
-    const qww = (s.invert ? Math.max(s.k2, s.ornith) : s.qwen) / maxSingle * 100;
-    const ow = (s.invert ? Math.max(s.k2, s.qwen) : s.ornith) / maxSingle * 100;
+    const qw = (s.invert ? s.muse : s.qwen) / maxSingle * 100;
+    const mw = (s.invert ? s.qwen : s.muse) / maxSingle * 100;
     return `<div class="tp-row">
       <div class="tp-label">${s.label}</div>
       <div class="tp-bars">
-        <div class="tp-bar k2" style="width:${k2w}%">${s.k2}</div>
-        <div class="tp-bar qwen" style="width:${qww}%">${s.qwen}</div>
-        <div class="tp-bar ornith" style="width:${ow}%">${s.ornith}</div>
+        <div class="tp-bar qwen" style="width:${qw}%">${s.qwen}</div>
+        <div class="tp-bar muse" style="width:${mw}%">${s.muse}</div>
       </div>
     </div>`;
   }).join('');
   
   const batch = [
-    { label: '1x TG TPS', k2: 48.1, qwen: 88.4, ornith: 80.6 },
-    { label: '2x TG TPS', k2: 88.7, qwen: 158.8, ornith: 167.3 },
-    { label: '4x TG TPS', k2: 172.4, qwen: 331.2, ornith: 338.5 },
-    { label: '8x TG TPS', k2: 354.3, qwen: 648.3, ornith: 671.6 }
+    { label: '1x TG TPS', qwen: 20.9, muse: 20.0 },
+    { label: '2x TG TPS', qwen: 31.3, muse: 29.7 },
+    { label: '4x TG TPS', qwen: 39.3, muse: 53.1 }
   ];
   
-  const maxBatch = Math.max(...batch.flatMap(s => [s.k2, s.qwen, s.ornith]));
+  const maxBatch = Math.max(...batch.flatMap(s => [s.qwen, s.muse]));
   
   document.getElementById('tpBatch').innerHTML = batch.map(s => {
-    const k2w = s.k2 / maxBatch * 100;
-    const qww = s.qwen / maxBatch * 100;
-    const ow = s.ornith / maxBatch * 100;
+    const qw = s.qwen / maxBatch * 100;
+    const mw = s.muse / maxBatch * 100;
     return `<div class="tp-row">
       <div class="tp-label">${s.label}</div>
       <div class="tp-bars">
-        <div class="tp-bar k2" style="width:${k2w}%">${s.k2}</div>
-        <div class="tp-bar qwen" style="width:${qww}%">${s.qwen}</div>
-        <div class="tp-bar ornith" style="width:${ow}%">${s.ornith}</div>
+        <div class="tp-bar qwen" style="width:${qw}%">${s.qwen}</div>
+        <div class="tp-bar muse" style="width:${mw}%">${s.muse}</div>
       </div>
     </div>`;
   }).join('');
@@ -550,11 +532,10 @@ renderTpBars();
 new Chart(document.getElementById('throughputChart'), {
   type: 'line',
   data: {
-    labels: ['1x', '2x', '4x', '8x'],
+    labels: ['1x', '2x', '4x'],
     datasets: [
-      { label: 'K2 Horizon', data: [48.1, 88.7, 172.4, 354.3], borderColor: K2_COLOR, backgroundColor: `rgba(${K2_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 },
-      { label: 'Qwen 3.6', data: [88.4, 158.8, 331.2, 648.3], borderColor: QWEN_COLOR, backgroundColor: `rgba(${QWEN_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 },
-      { label: 'Ornith 1.5', data: [80.6, 167.3, 338.5, 671.6], borderColor: ORNITH_COLOR, backgroundColor: `rgba(${ORNITH_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 }
+      { label: 'Qwen 3.8 27B', data: [20.9, 31.3, 39.3], borderColor: QWEN_COLOR, backgroundColor: `rgba(${QWEN_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 },
+      { label: 'Muse Glimmer 30B', data: [20.0, 29.7, 53.1], borderColor: MUSE_COLOR, backgroundColor: `rgba(${MUSE_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 }
     ]
   },
   options: {
