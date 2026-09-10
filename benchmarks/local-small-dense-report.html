@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3-Way Dense Model Comparison — K2 Horizon 7B vs NeoHorse-1 9B vs Ornith-1.5 9B</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface-alt: #1a1a26;
+  --border: #2a2a3a;
+  --text: #e8e8f0;
+  --text-muted: #8888a0;
+  --accent: #6366f1;
+  --k2: #f59e0b;
+  --k2-rgb: 245, 158, 11;
+  --neohorse: #10b981;
+  --neohorse-rgb: 16, 185, 129;
+  --ornith: #a855f7;
+  --ornith-rgb: 168, 85, 247;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+header {
+  padding: 48px 0 32px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 40px;
+}
+header h1 { font-size: 1.75rem; margin-bottom: 8px; }
+header p { color: var(--text-muted); font-size: 0.875rem; }
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--accent); }
+.card .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.card .value { font-size: 2rem; font-weight: 700; line-height: 1; }
+.card .sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.card.k2 .value { color: var(--k2); }
+.card.neohorse .value { color: var(--neohorse); }
+.card.ornith .value { color: var(--ornith); }
+
+.model-strip {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+.model-badge {
+  flex: 1;
+  min-width: 200px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.model-badge.k2 { border-left: 3px solid var(--k2); }
+.model-badge.neohorse { border-left: 3px solid var(--neohorse); }
+.model-badge.ornith { border-left: 3px solid var(--ornith); }
+.model-badge .name { font-weight: 600; font-size: 0.9rem; }
+.model-badge .detail { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+.section { margin-bottom: 48px; }
+.section-title { font-size: 1.1rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+.chart-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.chart-wrap canvas { max-height: 400px; }
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 768px) { .chart-row { grid-template-columns: 1fr; } }
+
+.benchmark-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.bench-btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.bench-btn:hover { border-color: var(--accent); color: var(--text); }
+.bench-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  table-layout: fixed;
+}
+.detail-table th:nth-child(1) { width: 28%; }
+.detail-table th:nth-child(2),
+.detail-table th:nth-child(3),
+.detail-table th:nth-child(4) { width: 18%; }
+.detail-table th:nth-child(5) { width: 20%; }
+.detail-table th {
+  text-align: center;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.detail-table th:first-child { text-align: left; }
+.detail-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+.detail-table td:first-child { text-align: left; }
+.detail-table tr:last-child td { border-bottom: none; }
+.detail-table .metric { color: var(--text-muted); }
+.detail-table .k2-val { color: var(--k2); font-weight: 600; }
+.detail-table .neohorse-val { color: var(--neohorse); font-weight: 600; }
+.detail-table .ornith-val { color: var(--ornith); font-weight: 600; }
+.detail-table .winner { font-weight: 700; }
+.detail-table .score-row { font-weight: 700; font-size: 1rem; background: var(--surface-alt); }
+
+.tp-bar-wrap { margin-bottom: 24px; }
+.tp-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.tp-label { width: 140px; font-size: 0.8rem; color: var(--text-muted); text-align: right; flex-shrink: 0; }
+.tp-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.tp-bar {
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  min-width: 40px;
+  transition: width 0.6s ease;
+}
+.tp-bar.k2 { background: var(--k2); }
+.tp-bar.neohorse { background: var(--neohorse); }
+.tp-bar.ornith { background: var(--ornith); }
+
+.verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.verdict-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.verdict-card h4 { font-size: 0.85rem; margin-bottom: 8px; }
+.verdict-card .winner { font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+.verdict-card .winner.k2 { color: var(--k2); }
+.verdict-card .winner.neohorse { color: var(--neohorse); }
+.verdict-card .winner.ornith { color: var(--ornith); }
+.verdict-card p { font-size: 0.8rem; color: var(--text-muted); }
+
+footer {
+  margin-top: 64px;
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.4s ease both; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<header>
+  <h1>3-Way Dense Model Comparison</h1>
+  <p>K2 Horizon 7B &nbsp;vs&nbsp; NeoHorse-1 9B &nbsp;vs&nbsp; Ornith-1.5 9B &mdash; 7 benchmarks + throughput (oQ6e, Mac M3 Max 64GB)</p>
+</header>
+
+<!-- Summary Cards -->
+<div class="summary-grid">
+  <div class="card k2">
+    <div class="label">K2 Horizon Wins</div>
+    <div class="value">3</div>
+    <div class="sub">Avg: 82.6</div>
+  </div>
+  <div class="card neohorse">
+    <div class="label">NeoHorse-1 Wins</div>
+    <div class="value">3</div>
+    <div class="sub">Avg: 84.7</div>
+  </div>
+  <div class="card ornith">
+    <div class="label">Ornith 1.5 Wins</div>
+    <div class="value">1</div>
+    <div class="sub">Avg: 80.9</div>
+  </div>
+  <div class="card">
+    <div class="label">Throughput (1x / 8x)</div>
+    <div class="value" style="color:var(--ornith)">43.9 / 304</div>
+    <div class="sub">Ornith fastest single & batch</div>
+  </div>
+</div>
+
+<!-- Model Badges -->
+<div class="model-strip">
+  <div class="model-badge k2">
+    <div class="name">K2 Horizon 7B</div>
+    <div class="detail">7B dense &bull; 512K context &bull; Apache 2.0 &bull; Spec Prefill variant available</div>
+  </div>
+  <div class="model-badge neohorse">
+    <div class="name">NeoHorse-1 9B</div>
+    <div class="detail">9B dense (Qwen3.5 base) &bull; 128K context &bull; Agent-native via routing harness</div>
+  </div>
+  <div class="model-badge ornith">
+    <div class="name">Ornith-1.5 9B</div>
+    <div class="detail">9B dense (Qwen3.5+Gemma4 base) &bull; 262K context &bull; MIT license</div>
+  </div>
+</div>
+
+<!-- Overall Radar -->
+<section class="section">
+  <h2 class="section-title">Overall Performance Profile</h2>
+  <div class="chart-wrap">
+    <canvas id="radarChart"></canvas>
+  </div>
+</section>
+
+<!-- Benchmark Bar Charts -->
+<section class="section">
+  <h2 class="section-title">Benchmark Scores</h2>
+  <div class="chart-wrap">
+    <canvas id="barChart"></canvas>
+  </div>
+</section>
+
+<!-- Selectable Detail -->
+<section class="section">
+  <h2 class="section-title">Individual Benchmark Detail</h2>
+  <div class="benchmark-nav" id="benchNav"></div>
+  <div class="chart-wrap">
+    <canvas id="detailChart"></canvas>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="detail-table" id="detailTable"></table>
+  </div>
+</section>
+
+<!-- Throughput -->
+<section class="section">
+  <h2 class="section-title">Throughput Comparison (Mac M3 Max 64GB)</h2>
+  <div class="chart-row">
+    <div class="chart-wrap">
+      <h3 style="font-size:0.9rem;margin-bottom:16px">Single Stream (4K prompt)</h3>
+      <div class="tp-bar-wrap" id="tpSingle"></div>
+    </div>
+    <div class="chart-wrap">
+      <h3 style="font-size:0.9rem;margin-bottom:16px">Batch Scaling (8x)</h3>
+      <div class="tp-bar-wrap" id="tpBatch"></div>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="throughputChart"></canvas>
+  </div>
+</section>
+
+<!-- Verdict -->
+<section class="section">
+  <h2 class="section-title">Verdict by Dimension</h2>
+  <div class="verdict-grid">
+    <div class="verdict-card">
+      <h4>Quality (Avg Score)</h4>
+      <div class="winner neohorse">NeoHorse-1 9B</div>
+      <p>Highest average (84.7). Wins Bugfind, Prompt Authority, and Tool Call with a perfect 100.</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Throughput (Single)</h4>
+      <div class="winner ornith">Ornith-1.5 9B</div>
+      <p>43.9 TG TPS at 1x. Fastest TTFT (5.04s), lowest TPOT (23ms), best PP TPS (813).</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Throughput (Batch)</h4>
+      <div class="winner ornith">Ornith-1.5 9B</div>
+      <p>304 TG TPS at 8x batch. 1.2x faster than NeoHorse, 2.2x faster than K2 Base.</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Tool Calling</h4>
+      <div class="winner neohorse">NeoHorse-1 9B</div>
+      <p>Perfect 100/100. Sweeps all 5 categories.</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Safety</h4>
+      <div class="winner neohorse">NeoHorse-1 9B</div>
+      <p>HVC 0 (zero harmful outputs). Best prompt attack resistance (73%).</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Document Parsing</h4>
+      <div class="winner k2">K2 Horizon 7B</div>
+      <p>91/100 on Data Extract. Near-perfect Complex Docs (99). 512K context.</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Memory Efficiency</h4>
+      <div class="winner k2">K2 Horizon 7B</div>
+      <p>8.27 GB at 4K context. 3.5x less than the others.</p>
+    </div>
+    <div class="verdict-card">
+      <h4>Spec Prefill Scaling</h4>
+      <div class="winner k2">K2 Horizon 7B</div>
+      <p>15.95x batch speedup variant. 2.3x better scaling than NeoHorse or Ornith.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generated 2026-09-10 &bull; oQ6e quantization &bull; Mac M3 Max 64GB &bull; 7 head-to-head benchmarks
+</footer>
+
+</div>
+
+<script>
+const K2_COLOR = '#f59e0b';
+const NEOHORSE_COLOR = '#10b981';
+const ORNITH_COLOR = '#a855f7';
+const K2_RGB = '245, 158, 11';
+const NEOHORSE_RGB = '16, 185, 129';
+const ORNITH_RGB = '168, 85, 247';
+
+const benchmarks = [
+  {
+    id: 'b1', name: 'Bugfind', k2: 86, neohorse: 90, ornith: 75,
+    cats: ['Syntax & Surface', 'Logic & Algorithmic', 'Subtle & Tricky', 'Red Herring', 'Multi-Turn'],
+    k2s: [67, 87, 87, 96, 90],
+    neohorses: [67, 100, 87, 100, 90],
+    os: [67, 87, 67, 67, 90]
+  },
+  {
+    id: 'b2', name: 'Data Extract', k2: 91, neohorse: 83, ornith: 79,
+    cats: ['Clean', 'Noisy & Informal', 'Multi-Entity', 'Implicit & Missing', 'Complex Docs'],
+    k2s: [95, 86, 90, 90, 99],
+    neohorses: [93, 72, 89, 80, 80],
+    os: [80, 74, 85, 79, 77]
+  },
+  {
+    id: 'b3', name: 'Instruct Follow', k2: 90, neohorse: 90, ornith: 97,
+    cats: ['Format Constraints', 'Ordering & Sorting', 'Multi-Domain', 'Precision Pressure', 'Adversarial'],
+    k2s: [80, 100, 100, 72, 100],
+    neohorses: [100, 100, 67, 85, 100],
+    os: [100, 100, 93, 93, 100]
+  },
+  {
+    id: 'b4', name: 'Prompt Authority', k2: 67, neohorse: 73, ornith: 67,
+    cats: ['Hard System vs User', 'User Overrides', 'User vs Tool Data', 'Layered Conflicts'],
+    k2s: [67, 100, 67, 0],
+    neohorses: [67, 67, 100, 33],
+    os: [67, 67, 100, 33]
+  },
+  {
+    id: 'b5', name: 'Reason Math', k2: 76, neohorse: 70, ornith: 75,
+    cats: ['Arithmetic', 'Logic Puzzles', 'Word Problems', 'Trick Questions', 'Applied Reasoning'],
+    k2s: [95, 57, 85, 85, 62],
+    neohorses: [100, 33, 85, 67, 85],
+    os: [77, 33, 85, 100, 85]
+  },
+  {
+    id: 'b6', name: 'Structured Output', k2: 89, neohorse: 87, ornith: 87,
+    cats: ['Basic Single', 'Less Common', 'Complex Structures', 'Conversion', 'Adversarial Edge'],
+    k2s: [100, 67, 100, 94, 83],
+    neohorses: [75, 100, 100, 71, 83],
+    os: [71, 92, 100, 65, 100]
+  },
+  {
+    id: 'b7', name: 'Tool Call', k2: 97, neohorse: 100, ornith: 93,
+    cats: ['Tool Selection', 'Parameter Precision', 'Multi-Step Chains', 'Restraint & Refusal', 'Error Recovery'],
+    k2s: [100, 100, 83, 100, 100],
+    neohorses: [100, 100, 100, 100, 100],
+    os: [100, 100, 67, 100, 100]
+  }
+];
+
+// Radar Chart
+new Chart(document.getElementById('radarChart'), {
+  type: 'radar',
+  data: {
+    labels: benchmarks.map(b => b.name),
+    datasets: [
+      { label: 'K2 Horizon 7B', data: benchmarks.map(b => b.k2), borderColor: K2_COLOR, backgroundColor: `rgba(${K2_RGB}, 0.15)`, pointBackgroundColor: K2_COLOR, pointBorderColor: K2_COLOR, borderWidth: 2 },
+      { label: 'NeoHorse-1 9B', data: benchmarks.map(b => b.neohorse), borderColor: NEOHORSE_COLOR, backgroundColor: `rgba(${NEOHORSE_RGB}, 0.15)`, pointBackgroundColor: NEOHORSE_COLOR, pointBorderColor: NEOHORSE_COLOR, borderWidth: 2 },
+      { label: 'Ornith-1.5 9B', data: benchmarks.map(b => b.ornith), borderColor: ORNITH_COLOR, backgroundColor: `rgba(${ORNITH_RGB}, 0.15)`, pointBackgroundColor: ORNITH_COLOR, pointBorderColor: ORNITH_COLOR, borderWidth: 2 }
+    ]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      r: { min: 0, max: 100, ticks: { stepSize: 20, color: '#8888a0', backdropColor: 'transparent' }, grid: { color: '#2a2a3a' }, pointLabels: { color: '#e8e8f0', font: { size: 11 } } }
+    },
+    plugins: { legend: { labels: { color: '#e8e8f0', font: { size: 12 } } } }
+  }
+});
+
+// Bar Chart
+new Chart(document.getElementById('barChart'), {
+  type: 'bar',
+  data: {
+    labels: benchmarks.map(b => b.name),
+    datasets: [
+      { label: 'K2 Horizon 7B', data: benchmarks.map(b => b.k2), backgroundColor: `rgba(${K2_RGB}, 0.8)`, borderRadius: 4 },
+      { label: 'NeoHorse-1 9B', data: benchmarks.map(b => b.neohorse), backgroundColor: `rgba(${NEOHORSE_RGB}, 0.8)`, borderRadius: 4 },
+      { label: 'Ornith-1.5 9B', data: benchmarks.map(b => b.ornith), backgroundColor: `rgba(${ORNITH_RGB}, 0.8)`, borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { min: 0, max: 100, grid: { color: '#2a2a3a' }, ticks: { color: '#8888a0' } },
+      x: { grid: { display: false }, ticks: { color: '#8888a0' } }
+    },
+    plugins: { legend: { labels: { color: '#e8e8f0', font: { size: 12 } } } }
+  }
+});
+
+// Benchmark Navigation + Detail
+let activeBench = 0;
+const navEl = document.getElementById('benchNav');
+const tableEl = document.getElementById('detailTable');
+let detailChart;
+
+function getWinner(b) {
+  const max = Math.max(b.k2, b.neohorse, b.ornith);
+  const winners = [];
+  if (b.k2 === max) winners.push('K2');
+  if (b.neohorse === max) winners.push('NeoHorse');
+  if (b.ornith === max) winners.push('Ornith');
+  return winners.join(' / ');
+}
+
+function renderNav() {
+  navEl.innerHTML = benchmarks.map((b, i) => {
+    const w = getWinner(b);
+    return `<button class="bench-btn ${i === activeBench ? 'active' : ''}" data-idx="${i}">
+      ${b.name} <span style="opacity:0.6">(${w})</span>
+    </button>`;
+  }).join('');
+  
+  navEl.querySelectorAll('.bench-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeBench = parseInt(btn.dataset.idx);
+      renderNav();
+      renderDetail();
+    });
+  });
+}
+
+function renderDetail() {
+  const b = benchmarks[activeBench];
+  const cats = b.cats;
+  
+  let html = `<tr><th>Category</th><th style="color:${K2_COLOR}">K2</th><th style="color:${NEOHORSE_COLOR}">NeoHorse</th><th style="color:${ORNITH_COLOR}">Ornith</th><th>Winner</th></tr>`;
+  cats.forEach((c, i) => {
+    const vals = [b.k2s[i], b.neohorses[i], b.os[i]];
+    const max = Math.max(...vals);
+    const wk = b.k2s[i] === max;
+    const wn = b.neohorses[i] === max;
+    const wo = b.os[i] === max;
+    const winnerText = (wk ? 'K2 ' : '') + (wn ? 'NeoHorse ' : '') + (wo ? 'Ornith' : '');
+    html += `<tr><td class="metric">${c}</td><td class="k2-val">${b.k2s[i]}</td><td class="neohorse-val">${b.neohorses[i]}</td><td class="ornith-val">${b.os[i]}</td><td style="text-align:center"><span class="winner" style="color:${wk ? K2_COLOR : wn ? NEOHORSE_COLOR : ORNITH_COLOR}">${winnerText.trim()}</span></td></tr>`;
+  });
+  const overallMax = Math.max(b.k2, b.neohorse, b.ornith);
+  html += `<tr class="score-row"><td class="metric">Overall</td><td class="k2-val">${b.k2}</td><td class="neohorse-val">${b.neohorse}</td><td class="ornith-val">${b.ornith}</td><td style="text-align:center"><span class="winner" style="color:${b.k2 === overallMax ? K2_COLOR : b.neohorse === overallMax ? NEOHORSE_COLOR : ORNITH_COLOR}">${getWinner(b)}</span></td></tr>`;
+  tableEl.innerHTML = html;
+  
+  if (detailChart) detailChart.destroy();
+  detailChart = new Chart(document.getElementById('detailChart'), {
+    type: 'bar',
+    data: {
+      labels: cats,
+      datasets: [
+        { label: 'K2 Horizon 7B', data: b.k2s, backgroundColor: `rgba(${K2_RGB}, 0.8)`, borderRadius: 4 },
+        { label: 'NeoHorse-1 9B', data: b.neohorses, backgroundColor: `rgba(${NEOHORSE_RGB}, 0.8)`, borderRadius: 4 },
+        { label: 'Ornith-1.5 9B', data: b.os, backgroundColor: `rgba(${ORNITH_RGB}, 0.8)`, borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { min: 0, max: 100, grid: { color: '#2a2a3a' }, ticks: { color: '#8888a0' } },
+        x: { grid: { display: false }, ticks: { color: '#8888a0' } }
+      },
+      plugins: { legend: { labels: { color: '#e8e8f0', font: { size: 12 } } } }
+    }
+  });
+}
+
+renderNav();
+renderDetail();
+
+// Throughput Bars
+function renderTpBars() {
+  const single = [
+    { label: 'TG TPS', k2: 35.8, neohorse: 36.1, ornith: 43.9 },
+    { label: 'TTFT (ms)', k2: 6029, neohorse: 5484, ornith: 5036, invert: true },
+    { label: 'TPOT (ms)', k2: 28.2, neohorse: 27.9, ornith: 23.0, invert: true },
+    { label: 'PP TPS', k2: 679, neohorse: 747, ornith: 813 },
+    { label: 'Throughput', k2: 439, neohorse: 466, ornith: 530 }
+  ];
+  
+  const maxSingle = Math.max(...single.flatMap(s => [s.k2, s.neohorse, s.ornith]));
+  
+  document.getElementById('tpSingle').innerHTML = single.map(s => {
+    const k2w = (s.invert ? Math.max(s.neohorse, s.ornith) : s.k2) / maxSingle * 100;
+    const nw = (s.invert ? Math.max(s.k2, s.ornith) : s.neohorse) / maxSingle * 100;
+    const ow = (s.invert ? Math.max(s.k2, s.neohorse) : s.ornith) / maxSingle * 100;
+    return `<div class="tp-row">
+      <div class="tp-label">${s.label}</div>
+      <div class="tp-bars">
+        <div class="tp-bar k2" style="width:${k2w}%">${s.k2}</div>
+        <div class="tp-bar neohorse" style="width:${nw}%">${s.neohorse}</div>
+        <div class="tp-bar ornith" style="width:${ow}%">${s.ornith}</div>
+      </div>
+    </div>`;
+  }).join('');
+  
+  const batch = [
+    { label: '1x TG TPS', k2: 35.8, neohorse: 36.1, ornith: 43.9 },
+    { label: '2x TG TPS', k2: 45.6, neohorse: 68.6, ornith: 86.3 },
+    { label: '4x TG TPS', k2: 88.7, neohorse: 132.7, ornith: 156.0 },
+    { label: '8x TG TPS', k2: 136.1, neohorse: 248.8, ornith: 304.0 }
+  ];
+  
+  const maxBatch = Math.max(...batch.flatMap(s => [s.k2, s.neohorse, s.ornith]));
+  
+  document.getElementById('tpBatch').innerHTML = batch.map(s => {
+    const k2w = s.k2 / maxBatch * 100;
+    const nw = s.neohorse / maxBatch * 100;
+    const ow = s.ornith / maxBatch * 100;
+    return `<div class="tp-row">
+      <div class="tp-label">${s.label}</div>
+      <div class="tp-bars">
+        <div class="tp-bar k2" style="width:${k2w}%">${s.k2}</div>
+        <div class="tp-bar neohorse" style="width:${nw}%">${s.neohorse}</div>
+        <div class="tp-bar ornith" style="width:${ow}%">${s.ornith}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+renderTpBars();
+
+// Throughput Line Chart
+new Chart(document.getElementById('throughputChart'), {
+  type: 'line',
+  data: {
+    labels: ['1x', '2x', '4x', '8x'],
+    datasets: [
+      { label: 'K2 Horizon 7B', data: [35.8, 45.6, 88.7, 136.1], borderColor: K2_COLOR, backgroundColor: `rgba(${K2_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 },
+      { label: 'NeoHorse-1 9B', data: [36.1, 68.6, 132.7, 248.8], borderColor: NEOHORSE_COLOR, backgroundColor: `rgba(${NEOHORSE_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 },
+      { label: 'Ornith-1.5 9B', data: [43.9, 86.3, 156.0, 304.0], borderColor: ORNITH_COLOR, backgroundColor: `rgba(${ORNITH_RGB}, 0.1)`, fill: true, tension: 0.3, borderWidth: 2 }
+    ]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { grid: { color: '#2a2a3a' }, ticks: { color: '#8888a0' }, title: { display: true, text: 'TG TPS', color: '#8888a0' } },
+      x: { grid: { color: '#2a2a3a' }, ticks: { color: '#8888a0' }, title: { display: true, text: 'Batch Size', color: '#8888a0' } }
+    },
+    plugins: { legend: { labels: { color: '#e8e8f0', font: { size: 12 } } } }
+  }
+});
+</script>
+
+</body>
+</html>
